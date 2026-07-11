@@ -1,0 +1,35 @@
+name = "torentchat-worker"
+main = "src/index.ts"
+compatibility_date = "2024-07-01"
+compatibility_flags = ["nodejs_compat"]
+
+# ─── Workers KV Namespaces ────────────────────────────────────────────────────
+# Signaling: ephemeral SDP/ICE offer-answer relay (TTL 60s)
+# Pending:   E2E-encrypted offline message cache (TTL 7 days, client-set)
+# Presence:  online/typing ephemeral state (TTL 30s)
+#
+# Create these namespaces BEFORE deploying:
+#   npx wrangler kv namespace create SIGNALING
+#   npx wrangler kv namespace create PENDING
+#   npx wrangler kv namespace create PRESENCE
+#
+# Then paste the returned IDs below.
+
+[[kv_namespaces]]
+binding = "SIGNALING"
+id = "REPLACE_WITH_SIGNALING_NAMESPACE_ID"
+
+[[kv_namespaces]]
+binding = "PENDING"
+id = "REPLACE_WITH_PENDING_NAMESPACE_ID"
+
+[[kv_namespaces]]
+binding = "PRESENCE"
+id = "REPLACE_WITH_PRESENCE_NAMESPACE_ID"
+
+# ─── Security headers ─────────────────────────────────────────────────────────
+[vars]
+MAX_PENDING_PER_USER = "100"
+MAX_PENDING_TTL_SECONDS = "604800"
+SIGNALING_TTL_SECONDS = "60"
+PRESENCE_TTL_SECONDS = "30"

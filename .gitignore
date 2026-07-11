@@ -1,0 +1,41 @@
+# ─── ZCode / IDE internal ────────────────────────────────────
+.zcode/
+
+# ─── Android ─────────────────────────────────────────────────
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Android app build outputs
+android-app/app/build/
+android-app/build/
+android-app/.gradle/
+android-app/local.properties
+
+# ─── Node / Cloudflare Worker ────────────────────────────────
+node_modules/
+worker/.wrangler/
+worker/dist/
+.dev.vars
+
+# ─── IDE ─────────────────────────────────────────────────────
+.vscode/
+*.swp
+*.swo
+*~
+
+# ─── OS ──────────────────────────────────────────────────────
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
