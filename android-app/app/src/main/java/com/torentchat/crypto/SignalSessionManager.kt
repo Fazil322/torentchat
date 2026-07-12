@@ -44,15 +44,19 @@ class SignalSessionManager(
         val identityPubKey = org.signal.libsignal.protocol.ecc.ECPublicKey(identityKey)
 
         // PreKeyBundle in libsignal 0.86.x requires Kyber (PQXDH) fields.
-        // We pass -1 for kyberPreKeyId to indicate no Kyber pre-key is available.
-        // This falls back to standard X3DH (no post-quantum upgrade).
+        // Since we don't use PQXDH, we generate a dummy KEM key pair to satisfy
+        // the constructor. The kyberPreKeyId=-1 signals "no Kyber pre-key" so
+        // the X3DH handshake proceeds without post-quantum upgrade.
+        val dummyKemKeyPair = org.signal.libsignal.protocol.kem.KEMKeyPair.generate(
+            org.signal.libsignal.protocol.kem.KEMKeyType.ML_KEM_768
+        )
         val bundle = org.signal.libsignal.protocol.state.PreKeyBundle(
             registrationId, deviceId, preKeyId, pubKey,
             signedPreKeyId, signedPubKey, signedPreKeySignature,
             org.signal.libsignal.protocol.IdentityKey(identityPubKey),
-            -1, // kyberPreKeyId = none
-            null, // kyberPreKeyPublic = none
-            ByteArray(0), // kyberPreKeySignature = empty
+            -1, // kyberPreKeyId = none (no PQXDH)
+            dummyKemKeyPair.publicKey,
+            ByteArray(0),
         )
         builder.process(bundle)
     }

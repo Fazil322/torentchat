@@ -7,7 +7,7 @@ import org.signal.libsignal.protocol.SignalProtocolAddress
 import org.signal.libsignal.protocol.ecc.ECKeyPair
 import org.signal.libsignal.protocol.ecc.ECPublicKey
 import org.signal.libsignal.protocol.groups.state.SenderKeyRecord
-import org.signal.libsignal.protocol.groups.state.SenderKeyStore
+import org.signal.libsignal.protocol.groups.state.SenderKeyStore // kept for reference, not implemented
 import org.signal.libsignal.protocol.state.KyberPreKeyRecord
 import org.signal.libsignal.protocol.state.IdentityKeyStore
 import org.signal.libsignal.protocol.state.KyberPreKeyStore
@@ -32,7 +32,7 @@ import java.util.concurrent.ConcurrentHashMap
 class TorentKeyStore(
     identityKeyPair: IdentityKeyPair,
     val registrationId: Int,
-) : IdentityKeyStore, PreKeyStore, SignedPreKeyStore, SessionStore, KyberPreKeyStore, SenderKeyStore {
+) : IdentityKeyStore, PreKeyStore, SignedPreKeyStore, SessionStore, KyberPreKeyStore {
 
     private val _identityKeyPair: IdentityKeyPair = identityKeyPair
     private val trustedIdentities = ConcurrentHashMap<SignalProtocolAddress, IdentityKey>()
@@ -135,10 +135,12 @@ class TorentKeyStore(
     }
 
     // ── SenderKeyStore (no-op — group messaging not used yet) ─────────────────
+    // SenderKeyStore interface signature varies across libsignal versions.
+    // We skip implementing it; SessionCipher for 1-on-1 chat doesn't need it.
 
-    override fun loadSenderKey(sender: SignalProtocolAddress): SenderKeyRecord? = null
+    fun loadSenderKey(sender: SignalProtocolAddress): SenderKeyRecord? = null
 
-    override fun storeSenderKey(sender: SignalProtocolAddress, record: SenderKeyRecord) {
+    fun storeSenderKey(sender: SignalProtocolAddress, record: SenderKeyRecord) {
         // No-op
     }
 
