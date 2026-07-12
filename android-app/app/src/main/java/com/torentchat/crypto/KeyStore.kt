@@ -8,7 +8,7 @@ import org.signal.libsignal.protocol.ecc.ECKeyPair
 import org.signal.libsignal.protocol.ecc.ECPublicKey
 import org.signal.libsignal.protocol.groups.state.SenderKeyRecord
 import org.signal.libsignal.protocol.groups.state.SenderKeyStore
-import org.signal.libsignal.protocol.kem.KyberPreKeyRecord
+import org.signal.libsignal.protocol.state.KyberPreKeyRecord
 import org.signal.libsignal.protocol.state.IdentityKeyStore
 import org.signal.libsignal.protocol.state.KyberPreKeyStore
 import org.signal.libsignal.protocol.state.PreKeyRecord

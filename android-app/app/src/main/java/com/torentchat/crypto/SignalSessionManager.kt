@@ -43,10 +43,16 @@ class SignalSessionManager(
         val signedPubKey = org.signal.libsignal.protocol.ecc.ECPublicKey(signedPreKeyPublic)
         val identityPubKey = org.signal.libsignal.protocol.ecc.ECPublicKey(identityKey)
 
+        // PreKeyBundle in libsignal 0.86.x requires Kyber (PQXDH) fields.
+        // We pass -1 for kyberPreKeyId to indicate no Kyber pre-key is available.
+        // This falls back to standard X3DH (no post-quantum upgrade).
         val bundle = org.signal.libsignal.protocol.state.PreKeyBundle(
             registrationId, deviceId, preKeyId, pubKey,
             signedPreKeyId, signedPubKey, signedPreKeySignature,
             org.signal.libsignal.protocol.IdentityKey(identityPubKey),
+            -1, // kyberPreKeyId = none
+            null, // kyberPreKeyPublic = none
+            ByteArray(0), // kyberPreKeySignature = empty
         )
         builder.process(bundle)
     }
