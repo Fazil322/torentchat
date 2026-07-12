@@ -4,6 +4,8 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.torentchat.data.repository.ContactRepository
+import com.torentchat.data.repository.ConversationRepository
+import com.torentchat.identity.IdentityManager
 import com.torentchat.identity.InvitePayload
 import com.torentchat.signaling.SignalingClient
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -50,6 +52,8 @@ sealed class ScanUiState {
 @HiltViewModel
 class ScanViewModel @Inject constructor(
     private val contactRepository: ContactRepository,
+    private val conversationRepository: ConversationRepository,
+    private val identityManager: IdentityManager,
     private val signalingClient: SignalingClient,
 ) : ViewModel() {
 
@@ -75,12 +79,18 @@ class ScanViewModel @Inject constructor(
                 return@launch
             }
             try {
-                // An invite payload carries no display name — store null and
-                // let the user rename the contact later.
+                // Save the peer as a contact
                 contactRepository.addContact(
                     peerId = payload.peerId,
                     displayName = null,
                     identityKey = payload.identityKey,
+                )
+                // Create a conversation so it appears in the conversations list
+                val localPeerId = identityManager.currentIdentity?.peerId ?: ""
+                conversationRepository.createDirectConversation(
+                    localPeerId = localPeerId,
+                    remotePeerId = payload.peerId,
+                    title = payload.peerId,
                 )
                 _uiState.value = ScanUiState.Connected
             } catch (t: Throwable) {
