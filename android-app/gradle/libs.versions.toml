@@ -86,10 +86,8 @@ ktor-serialization-json = { group = "io.ktor", name = "ktor-serialization-kotlin
 # WebRTC
 stream-webrtc-android = { group = "io.getstream", name = "stream-webrtc-android", version.ref = "streamWebrtc" }
 
-# Signal Protocol — protocol classes (org.signal.libsignal API)
-libsignal = { group = "org.signal", name = "libsignal", version.ref = "libsignal" }
-# Signal Protocol — Android native bindings (.so files for ARM/x86)
-libsignal-android = { group = "org.signal", name = "libsignal-android", version.ref = "libsignal" }
+# Signal Protocol — Android (includes native .so + protocol classes via libsignal-client transitive dep)
+libsignal = { group = "org.signal", name = "libsignal-android", version.ref = "libsignal" }
 
 # SQLCipher + Room
 sqlcipher = { group = "net.zetetic", name = "android-database-sqlcipher", version.ref = "sqlcipher" }
