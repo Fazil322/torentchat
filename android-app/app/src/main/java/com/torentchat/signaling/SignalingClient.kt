@@ -133,7 +133,7 @@ class SignalingClient(
     }
 
     /** JSON-encode a raw string value for embedding in a JSON body. */
-    private fun quote(s: String): String = json.encodeToString(kotlinx.serialization.builtins.serializer<String>(), s)
+    private fun quote(s: String): String = "\"${s.replace("\\", "\\\\").replace("\"", "\\\"")}\""
 
     fun close() { httpClient.close() }
 }

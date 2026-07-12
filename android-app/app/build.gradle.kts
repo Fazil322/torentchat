@@ -104,6 +104,7 @@ dependencies {
 
     // ── Signal Protocol (E2EE) ─────────────────────────────────────────────
     implementation(libs.libsignal)
+    implementation(libs.libsignal.android)
 
     // ── SQLCipher + Room (encrypted local storage) ─────────────────────────
     implementation(libs.sqlcipher)

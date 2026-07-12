@@ -1,8 +1,6 @@
 package com.torentchat.webrtc
 
 import android.content.Context
-import org.webrtc.DefaultVideoDecoderFactory
-import org.webrtc.DefaultVideoEncoderFactory
 import org.webrtc.PeerConnectionFactory
 
 /**
@@ -29,8 +27,6 @@ class WebRtcManager {
         )
 
         factory = PeerConnectionFactory.builder()
-            .setVideoEncoderFactory(DefaultVideoEncoderFactory(true, true))
-            .setVideoDecoderFactory(DefaultVideoDecoderFactory())
             .createPeerConnectionFactory()
     }
 
