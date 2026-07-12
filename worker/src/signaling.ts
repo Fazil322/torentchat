@@ -68,6 +68,28 @@ export async function handleGetPreKeys(
 }
 
 // ── SDP Offer / Answer / ICE relay ────────────────────────────────────────────
+// Uses a single JSON array per recipient (sig-queue:${peerId}) instead of
+// individual KV keys. This avoids KV list() eventual-consistency delays —
+// a get() + put() on the same key is read-after-write consistent.
+
+const SIGNALING_MAX_QUEUE = 50;
+
+/** Append a signaling message to the recipient's queue (single KV key). */
+async function appendSignalingMessage(
+  env: Env,
+  to: string,
+  msg: { type: string; from: string; payload: string }
+): Promise<void> {
+  const queueKey = `sig-queue:${to}`;
+  const existing = await env.SIGNALING.get(queueKey);
+  const queue: typeof msg[] = existing ? JSON.parse(existing) : [];
+  queue.push(msg);
+  // Cap queue size (FIFO eviction)
+  while (queue.length > SIGNALING_MAX_QUEUE) queue.shift();
+  await env.SIGNALING.put(queueKey, JSON.stringify(queue), {
+    expirationTtl: parseInt(env.SIGNALING_TTL_SECONDS || '60'),
+  });
+}
 
 export async function handleSignalingOffer(
   request: Request,
@@ -77,17 +99,8 @@ export async function handleSignalingOffer(
 ): Promise<Response> {
   const body = await readJson(request);
   const { from, to, sdp } = body;
-
-  if (!from || !to || !sdp) {
-    return json({ error: 'missing from/to/sdp' }, 400);
-  }
-
-  await env.SIGNALING.put(
-    `sig:${to}:${Date.now()}`,
-    JSON.stringify({ type: 'offer', from, payload: sdp }),
-    { expirationTtl: parseInt(env.SIGNALING_TTL_SECONDS || '60') }
-  );
-
+  if (!from || !to || !sdp) return json({ error: 'missing from/to/sdp' }, 400);
+  await appendSignalingMessage(env, to, { type: 'offer', from, payload: sdp });
   return json({ ok: true });
 }
 
@@ -99,17 +112,8 @@ export async function handleSignalingAnswer(
 ): Promise<Response> {
   const body = await readJson(request);
   const { from, to, sdp } = body;
-
-  if (!from || !to || !sdp) {
-    return json({ error: 'missing from/to/sdp' }, 400);
-  }
-
-  await env.SIGNALING.put(
-    `sig:${to}:${Date.now()}`,
-    JSON.stringify({ type: 'answer', from, payload: sdp }),
-    { expirationTtl: parseInt(env.SIGNALING_TTL_SECONDS || '60') }
-  );
-
+  if (!from || !to || !sdp) return json({ error: 'missing from/to/sdp' }, 400);
+  await appendSignalingMessage(env, to, { type: 'answer', from, payload: sdp });
   return json({ ok: true });
 }
 
@@ -121,21 +125,12 @@ export async function handleSignalingIce(
 ): Promise<Response> {
   const body = await readJson(request);
   const { from, to, candidate } = body;
-
-  if (!from || !to || !candidate) {
-    return json({ error: 'missing from/to/candidate' }, 400);
-  }
-
-  await env.SIGNALING.put(
-    `sig:${to}:${Date.now()}`,
-    JSON.stringify({ type: 'ice', from, payload: candidate }),
-    { expirationTtl: parseInt(env.SIGNALING_TTL_SECONDS || '60') }
-  );
-
+  if (!from || !to || !candidate) return json({ error: 'missing from/to/candidate' }, 400);
+  await appendSignalingMessage(env, to, { type: 'ice', from, payload: candidate });
   return json({ ok: true });
 }
 
-/** Long-poll: list all pending signaling messages for a peer, then delete them. */
+/** Long-poll: read & clear all pending signaling messages for a peer. */
 export async function handleSignalingPoll(
   request: Request,
   env: Env,
@@ -149,19 +144,15 @@ export async function handleSignalingPoll(
     return json({ error: 'missing peerId query param' }, 400);
   }
 
-  // KV list is eventually consistent, but sufficient for signaling relay.
-  const list = await env.SIGNALING.list({ prefix: `sig:${peerId}:` });
-  const messages: any[] = [];
+  // Read from the single queue key (read-after-write consistent, unlike list())
+  const queueKey = `sig-queue:${peerId}`;
+  const raw = await env.SIGNALING.get(queueKey);
+  const messages: any[] = raw ? JSON.parse(raw) : [];
 
-  const deleteOps: Promise<void>[] = [];
-  for (const key of list.keys) {
-    const raw = await env.SIGNALING.get(key.name);
-    if (raw) {
-      messages.push(JSON.parse(raw));
-    }
-    deleteOps.push(env.SIGNALING.delete(key.name));
+  // Clear the queue (messages are consumed on poll)
+  if (raw) {
+    await env.SIGNALING.delete(queueKey);
   }
-  await Promise.all(deleteOps);
 
   return json({ peerId, messages });
 }
