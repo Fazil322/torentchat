@@ -16,8 +16,9 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // Stream WebRTC (io.getstream:stream-webrtc-android) and libsignal
-        // are both published to Maven Central — no extra repo needed.
+        // Signal Protocol library (libsignal-android) is published to
+        // Signal's public Cloudsmith repository, not Maven Central.
+        maven { url = uri("https://dl.cloudsmith.io/public/communication/libsignal/maven/") }
     }
 }
 
