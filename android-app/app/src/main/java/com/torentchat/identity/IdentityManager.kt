@@ -51,7 +51,7 @@ class IdentityManager {
      * (no ambiguous chars like 0/O or 1/I) for easy verbal exchange.
      */
     private fun derivePeerId(keyStore: TorentKeyStore): String {
-        val pubKeyBytes = keyStore.identityKeyPair.publicKey.serialize()
+        val pubKeyBytes = keyStore.getIdentityKeyPair().publicKey.serialize()
         val hash = MessageDigest.getInstance("SHA-256").digest(pubKeyBytes)
         // Take first 5 bytes → 8 Base32 chars
         val raw = hash.copyOfRange(0, 5)

@@ -34,9 +34,12 @@ import java.util.concurrent.ConcurrentHashMap
  * @param registrationId   random 14-bit ID to avoid address collisions
  */
 class TorentKeyStore(
-    val identityKeyPair: IdentityKeyPair,
+    identityKeyPair: IdentityKeyPair,
     val registrationId: Int,
 ) : IdentityKeyStore, PreKeyStore, SignedPreKeyStore, SessionStore {
+
+    // Store as private field to avoid JVM signature clash with getIdentityKeyPair() override
+    private val _identityKeyPair: IdentityKeyPair = identityKeyPair
 
     private val trustedIdentities = ConcurrentHashMap<SignalProtocolAddress, IdentityKey>()
     private val preKeys = ConcurrentHashMap<Int, PreKeyRecord>()
@@ -45,7 +48,7 @@ class TorentKeyStore(
 
     // ── IdentityKeyStore ──────────────────────────────────────────────────────
 
-    override fun getIdentityKeyPair(): IdentityKeyPair = identityKeyPair
+    override fun getIdentityKeyPair(): IdentityKeyPair = _identityKeyPair
 
     override fun getLocalRegistrationId(): Int = registrationId
 

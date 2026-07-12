@@ -40,7 +40,7 @@ class SignalSessionManager(
     ): PreKeyBundleDto {
         return PreKeyBundleDto(
             identityKey = Base64.getEncoder().encodeToString(
-                keyStore.identityKeyPair.publicKey.serialize()
+                keyStore.getIdentityKeyPair().publicKey.serialize()
             ),
             signedPreKeyId = signedPreKeyId,
             signedPreKey = signedPreKey.publicKeyB64,
