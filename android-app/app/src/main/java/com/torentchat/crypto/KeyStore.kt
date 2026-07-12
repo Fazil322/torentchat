@@ -4,9 +4,9 @@ import org.signal.libsignal.protocol.IdentityKey
 import org.signal.libsignal.protocol.IdentityKeyPair
 import org.signal.libsignal.protocol.SignalProtocolAddress
 import org.signal.libsignal.protocol.ecc.ECKeyPair
+import org.signal.libsignal.protocol.groups.SenderKeyName
 import org.signal.libsignal.protocol.groups.state.SenderKeyRecord
 import org.signal.libsignal.protocol.groups.state.SenderKeyStore
-import org.signal.libsignal.protocol.kem.KEMPublicKey
 import org.signal.libsignal.protocol.kem.KyberPreKeyRecord
 import org.signal.libsignal.protocol.state.IdentityKeyStore
 import org.signal.libsignal.protocol.state.KyberPreKeyStore
@@ -46,7 +46,7 @@ class TorentKeyStore(
     private val signedPreKeys = ConcurrentHashMap<Int, SignedPreKeyRecord>()
     private val kyberPreKeys = ConcurrentHashMap<Int, KyberPreKeyRecord>()
     private val sessions = ConcurrentHashMap<SignalProtocolAddress, SessionRecord>()
-    private val senderKeys = ConcurrentHashMap<org.signal.libsignal.protocol.groups.SenderKeyName, SenderKeyRecord>()
+    private val senderKeys = ConcurrentHashMap<SenderKeyName, SenderKeyRecord>()
 
     // ── IdentityKeyStore ──────────────────────────────────────────────────────
 
@@ -175,11 +175,11 @@ class TorentKeyStore(
 
     // ── SenderKeyStore (for group messaging — no-op for now) ──────────────────
 
-    override fun loadSenderKey(senderKeyName: org.signal.libsignal.protocol.groups.SenderKeyName): SenderKeyRecord? =
+    override fun loadSenderKey(senderKeyName: SenderKeyName): SenderKeyRecord? =
         senderKeys[senderKeyName]
 
     override fun storeSenderKey(
-        senderKeyName: org.signal.libsignal.protocol.groups.SenderKeyName,
+        senderKeyName: SenderKeyName,
         record: SenderKeyRecord,
     ) {
         senderKeys[senderKeyName] = record
