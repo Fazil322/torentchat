@@ -16,9 +16,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // Stream WebRTC builds are published to Maven Central, but we include
-        // their repo as a fallback for snapshot/edge releases.
-        maven { url = uri("https://repo.stream.io/artifactory/maven-public/") }
+        // Stream WebRTC (io.getstream:stream-webrtc-android) and libsignal
+        // are both published to Maven Central — no extra repo needed.
     }
 }
 
