@@ -61,7 +61,9 @@ export async function handleStorePending(
   });
 
   queue.push(entryKey);
-  ctx.waitUntil(env.PENDING.put(listKey, JSON.stringify(queue)));
+  // Must await (not waitUntil) so the list is written before we return,
+  // ensuring a subsequent fetch sees the entry immediately.
+  await env.PENDING.put(listKey, JSON.stringify(queue));
 
   return json({ ok: true, ttl: effectiveTtl });
 }
