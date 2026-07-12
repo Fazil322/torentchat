@@ -1,5 +1,6 @@
 package com.torentchat.signaling
 
+import com.torentchat.domain.AbConfigResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
@@ -130,6 +131,13 @@ class SignalingClient(
     /** Check if a peer is online. */
     suspend fun getPresence(peerId: String): String {
         return httpClient.get("$relayBaseUrl/v1/presence/$peerId").body()
+    }
+
+    // ── A/B Testing config ────────────────────────────────────────────────────
+
+    /** Fetch A/B experiment assignments for our peer (privacy-preserving). */
+    suspend fun fetchAbConfig(peerId: String): AbConfigResponse {
+        return httpClient.get("$relayBaseUrl/v1/ab-config/$peerId").body()
     }
 
     /** JSON-encode a raw string value for embedding in a JSON body. */

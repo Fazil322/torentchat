@@ -42,6 +42,7 @@ import {
 } from './signaling';
 import { handleStorePending, handleFetchPending, handleClearPending } from './pending';
 import { handleSetPresence, handleGetPresence } from './presence';
+import { handleGetAbConfig } from './abtesting';
 
 type Handler = (
   request: Request,
@@ -92,6 +93,9 @@ const routes: Route[] = [
   // ── Presence (ephemeral online/typing) ──────────────────────────────────
   route('POST', '/v1/presence', handleSetPresence),
   route('GET', '/v1/presence/:peerId', handleGetPresence),
+
+  // ── A/B Testing (privacy-preserving, deterministic bucketing) ──────────
+  route('GET', '/v1/ab-config/:peerId', handleGetAbConfig),
 ];
 
 export async function routeRequest(
