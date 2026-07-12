@@ -26,7 +26,7 @@ android {
         buildConfigField(
             "String",
             "SIGNALING_RELAY_URL",
-            "\"${System.getenv("SIGNALING_RELAY_URL") ?: "https://torentchat-worker.example.workers.dev"}\""
+            "\"${System.getenv("SIGNALING_RELAY_URL") ?: "https://torentchat-worker.ztik-user.workers.dev"}\""
         )
     }
 

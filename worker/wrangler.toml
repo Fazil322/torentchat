@@ -17,15 +17,15 @@ compatibility_flags = ["nodejs_compat"]
 
 [[kv_namespaces]]
 binding = "SIGNALING"
-id = "REPLACE_WITH_SIGNALING_NAMESPACE_ID"
+id = "5959fc8461264650aaa3cf26f58776ed"
 
 [[kv_namespaces]]
 binding = "PENDING"
-id = "REPLACE_WITH_PENDING_NAMESPACE_ID"
+id = "ddba4e87ea834f8cbaa23b662c4e9474"
 
 [[kv_namespaces]]
 binding = "PRESENCE"
-id = "REPLACE_WITH_PRESENCE_NAMESPACE_ID"
+id = "24a4202efd8d4d0baf2daf35cffcf881"
 
 # ─── Security headers ─────────────────────────────────────────────────────────
 [vars]
