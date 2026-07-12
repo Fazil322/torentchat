@@ -52,3 +52,12 @@ data class PendingEnvelope(
     val envelope: String,  // opaque E2E ciphertext JSON — decrypted client-side only
     val ts: Long,
 )
+
+/** Response from GET /v1/presence/:peerId */
+@Serializable
+data class PresenceResponse(
+    val peerId: String,
+    val online: Boolean,
+    val typing: Boolean? = null,
+    val ts: Long? = null,
+)

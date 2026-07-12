@@ -5,8 +5,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -74,12 +77,10 @@ class AbTestManager @Inject constructor(
         return _assignments.value[experimentName] ?: default
     }
 
-    /** Reactive variant for a specific experiment. */
-    fun variantFlow(experimentName: String, default: String = "control"): StateFlow<String> =
-        MutableStateFlow(getVariant(experimentName, default)).also { flow ->
-            // Update the flow when assignments change
-            // (simplified — in production use map { } on assignments)
-        }.asStateFlow()
+    /** Reactive variant for a specific experiment (updates when config refreshes). */
+    fun variantFlow(scope: CoroutineScope, experimentName: String, default: String = "control"): StateFlow<String> =
+        _assignments.map { it[experimentName] ?: default }
+            .stateIn(scope, SharingStarted.Eagerly, default)
 
     fun shutdown() {
         pollJob?.cancel()

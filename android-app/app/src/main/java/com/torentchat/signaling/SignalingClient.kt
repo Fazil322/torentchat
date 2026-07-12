@@ -129,7 +129,7 @@ class SignalingClient(
     }
 
     /** Check if a peer is online. */
-    suspend fun getPresence(peerId: String): String {
+    suspend fun getPresence(peerId: String): PresenceResponse {
         return httpClient.get("$relayBaseUrl/v1/presence/$peerId").body()
     }
 

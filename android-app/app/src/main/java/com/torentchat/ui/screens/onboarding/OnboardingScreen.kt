@@ -22,66 +22,51 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
+import androidx.hilt.navigation.compose.hiltViewModel
 
 /**
  * First-launch onboarding screen.
  *
- * Generates the user's anonymous identity: a random peer ID plus the Signal
- * Protocol identity key pair (X3DH). No email or phone number is ever
- * collected — identity is random and local-only.
- *
- * The actual key generation lives in the identity layer; this screen drives a
- * short simulated loading state then reports completion via [onCompleted].
+ * Generates the user's anonymous identity via [OnboardingViewModel] — a random
+ * peer ID + Signal Protocol Curve25519 identity key pair. No email or phone
+ * number is collected.
  */
 @Composable
 fun OnboardingScreen(
     onCompleted: () -> Unit,
+    viewModel: OnboardingViewModel = hiltViewModel(),
 ) {
-    // TODO: val viewModel: OnboardingViewModel = hiltViewModel()
-    //  viewModel.generateIdentity() should:
-    //   - generate a Curve25519 identity key pair (libsignal IdentityKeyPair)
-    //   - derive the peerId from the public key fingerprint
-    //   - persist the encrypted identity via IdentityRepository
-    //   - expose a StateFlow<OnboardingUiState> (Loading / Generated / Error)
+    val uiState by viewModel.uiState.collectAsState()
 
-    var isGenerating by remember { mutableStateOf(false) }
-
-    // Simulated generation completes after a short delay. Real impl will react
-    // to the ViewModel's state instead of a fixed delay.
-    LaunchedEffect(isGenerating) {
-        if (isGenerating) {
-            delay(1200) // TODO: replace with collection of viewModel.uiState
+    // Navigate to conversations once identity is generated
+    LaunchedEffect(uiState) {
+        if (uiState is OnboardingUiState.Done) {
             onCompleted()
         }
     }
+
+    val isLoading = uiState is OnboardingUiState.Loading
+    val errorMessage = (uiState as? OnboardingUiState.Error)?.message
 
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background,
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
+            modifier = Modifier.fillMaxSize().padding(24.dp),
             contentAlignment = Alignment.Center,
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 480.dp),
+                modifier = Modifier.fillMaxWidth().widthIn(max = 480.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                // App logo / title
                 Surface(
                     shape = MaterialTheme.shapes.large,
                     color = MaterialTheme.colorScheme.primaryContainer,
@@ -89,7 +74,7 @@ fun OnboardingScreen(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = Icons.Outlined.VerifiedUser,
+                            Icons.Outlined.VerifiedUser,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier.size(52.dp),
@@ -99,14 +84,9 @@ fun OnboardingScreen(
 
                 Spacer(Modifier.height(8.dp))
 
+                Text("TorentChat", style = MaterialTheme.typography.titleLarge)
                 Text(
-                    text = "TorentChat",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
-
-                Text(
-                    text = "Pesan Anda. Terenkripsi. Tanpa server pusat.",
+                    "Pesan Anda. Terenkripsi. Tanpa server pusat.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -114,26 +94,19 @@ fun OnboardingScreen(
 
                 Spacer(Modifier.height(16.dp))
 
-                // Privacy notice
                 Surface(
                     shape = MaterialTheme.shapes.medium,
                     color = MaterialTheme.colorScheme.surfaceVariant,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Lock,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
+                        Icon(Icons.Outlined.Lock, null, tint = MaterialTheme.colorScheme.primary)
                         Text(
-                            text = "Identitas Anda dibuat secara acak. " +
+                            "Identitas Anda dibuat secara acak. " +
                                 "Tidak ada email atau nomor telepon yang dikumpulkan.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -142,31 +115,32 @@ fun OnboardingScreen(
                     }
                 }
 
+                if (errorMessage != null) {
+                    Text(
+                        errorMessage,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+
+                Spacer(Modifier.height(8.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
                 Spacer(Modifier.height(8.dp))
 
-                HorizontalDivider(
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                Spacer(Modifier.height(8.dp))
-
-                // Primary CTA — generates the identity (or shows loading).
                 Button(
-                    onClick = { isGenerating = true },
-                    enabled = !isGenerating,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
+                    onClick = { viewModel.generateIdentity() },
+                    enabled = !isLoading,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
                 ) {
-                    if (isGenerating) {
+                    if (isLoading) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(24.dp),
                             strokeWidth = 2.dp,
                             color = MaterialTheme.colorScheme.onPrimary,
                         )
                     } else {
-                        Text(text = "Buat Identitas")
+                        Text("Buat Identitas")
                     }
                 }
             }
