@@ -28,8 +28,8 @@ okhttp = "4.12.0"
 # WebRTC (Stream's maintained build of Google WebRTC for Android)
 streamWebrtc = "1.1.0"
 
-# E2EE — Signal Protocol (legacy libsignal-android with org.whispersystems.libsignal API)
-libsignal = "2.8.1"
+# E2EE — Signal Protocol (modern libsignal with org.signal.libsignal API)
+libsignal = "0.86.5"
 
 # Encrypted local DB
 sqlcipher = "4.5.4"
@@ -86,7 +86,7 @@ ktor-serialization-json = { group = "io.ktor", name = "ktor-serialization-kotlin
 # WebRTC
 stream-webrtc-android = { group = "io.getstream", name = "stream-webrtc-android", version.ref = "streamWebrtc" }
 
-# Signal Protocol (legacy artifact with org.whispersystems.libsignal API)
+# Signal Protocol (modern artifact with org.signal.libsignal API)
 libsignal = { group = "org.signal", name = "libsignal-android", version.ref = "libsignal" }
 
 # SQLCipher + Room

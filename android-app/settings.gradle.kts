@@ -16,9 +16,7 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // Signal Protocol library (libsignal-android) is published to
-        // Signal's public Cloudsmith repository, not Maven Central.
-        maven { url = uri("https://dl.cloudsmith.io/public/communication/libsignal/maven/") }
+        // org.signal:libsignal-android is on Maven Central since 0.15.0
     }
 }
 
