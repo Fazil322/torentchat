@@ -86,8 +86,10 @@ ktor-serialization-json = { group = "io.ktor", name = "ktor-serialization-kotlin
 # WebRTC
 stream-webrtc-android = { group = "io.getstream", name = "stream-webrtc-android", version.ref = "streamWebrtc" }
 
-# Signal Protocol — Android (includes native .so + protocol classes via libsignal-client transitive dep)
+# Signal Protocol — Android (native .so + protocol classes)
 libsignal = { group = "org.signal", name = "libsignal-android", version.ref = "libsignal" }
+# Signal Protocol — protocol classes (explicit, in case transitive resolution fails)
+libsignal-client = { group = "org.signal", name = "libsignal-client", version.ref = "libsignal" }
 
 # SQLCipher + Room
 sqlcipher = { group = "net.zetetic", name = "android-database-sqlcipher", version.ref = "sqlcipher" }
