@@ -48,7 +48,7 @@ class SignalSessionManager(
         // the constructor. The kyberPreKeyId=-1 signals "no Kyber pre-key" so
         // the X3DH handshake proceeds without post-quantum upgrade.
         val dummyKemKeyPair = org.signal.libsignal.protocol.kem.KEMKeyPair.generate(
-            org.signal.libsignal.protocol.kem.KEMKeyType.ML_KEM_768
+            org.signal.libsignal.protocol.kem.KEMKeyType.KYBER_1024
         )
         val bundle = org.signal.libsignal.protocol.state.PreKeyBundle(
             registrationId, deviceId, preKeyId, pubKey,
