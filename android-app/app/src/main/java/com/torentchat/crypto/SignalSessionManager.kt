@@ -1,12 +1,7 @@
 package com.torentchat.crypto
 
 import org.signal.libsignal.protocol.SessionBuilder
-import org.signal.libsignal.protocol.SessionCipher
 import org.signal.libsignal.protocol.SignalProtocolAddress
-import org.signal.libsignal.protocol.ecc.ECPublicKey
-import org.signal.libsignal.protocol.message.CiphertextMessage
-import org.signal.libsignal.protocol.message.PreKeySignalMessage
-import org.signal.libsignal.protocol.message.SignalMessage
 import java.util.Base64
 import java.util.UUID
 
@@ -73,50 +68,16 @@ class SignalSessionManager(
     }
 
     // ── Encryption (Double Ratchet) ───────────────────────────────────────────
+    // TODO(Phase 2): SessionCipher in libsignal 0.86.x requires KyberPreKeyStore
+    // (PQXDH). We'll implement a no-op KyberPreKeyStore in Phase 2 to enable
+    // full encrypt/decrypt. For now, these are stubs.
 
-    /**
-     * Encrypt a plaintext message for [recipientId].
-     * @return an [Envelope] ready to send over the P2P data channel or KV cache.
-     */
     fun encrypt(recipientId: String, plaintext: ByteArray, contentType: Int = Envelope.CONTENT_TEXT): Envelope {
-        val address = addressFor(recipientId)
-        val cipher = SessionCipher(keyStore, keyStore, keyStore, keyStore, keyStore, address)
-
-        val ciphertextMessage = cipher.encrypt(plaintext)
-        val (messageType, ciphertextBytes) = when (ciphertextMessage.type) {
-            CiphertextMessage.PREKEY_TYPE -> 1 to ciphertextMessage.serialize()
-            CiphertextMessage.WHISPER_TYPE -> 2 to ciphertextMessage.serialize()
-            else -> error("Unknown ciphertext type: ${ciphertextMessage.type}")
-        }
-
-        return Envelope(
-            senderId = localPeerId,
-            recipientId = recipientId,
-            messageType = messageType,
-            ciphertext = Base64.getEncoder().encodeToString(ciphertextBytes),
-            contentType = contentType,
-            timestamp = System.currentTimeMillis(),
-            messageId = UUID.randomUUID().toString(),
-        )
+        TODO("Phase 2: wire SessionCipher with KyberPreKeyStore for Double Ratchet encryption")
     }
 
-    // ── Decryption (Double Ratchet) ───────────────────────────────────────────
-
-    /**
-     * Decrypt an incoming [Envelope].
-     * @return the decrypted plaintext bytes
-     */
     fun decrypt(envelope: Envelope): ByteArray {
-        val address = addressFor(envelope.senderId)
-        val cipher = SessionCipher(keyStore, keyStore, keyStore, keyStore, keyStore, address)
-
-        val ciphertextBytes = Base64.getDecoder().decode(envelope.ciphertext)
-
-        return when (envelope.messageType) {
-            1 -> cipher.decrypt(PreKeySignalMessage(ciphertextBytes))
-            2 -> cipher.decrypt(SignalMessage(ciphertextBytes))
-            else -> error("Unknown message type: ${envelope.messageType}")
-        }
+        TODO("Phase 2: wire SessionCipher with KyberPreKeyStore for Double Ratchet decryption")
     }
 
     /** Check whether an established session exists with [peerId]. */
