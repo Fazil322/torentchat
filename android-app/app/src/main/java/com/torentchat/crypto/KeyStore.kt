@@ -4,7 +4,6 @@ import org.signal.libsignal.protocol.IdentityKey
 import org.signal.libsignal.protocol.IdentityKeyPair
 import org.signal.libsignal.protocol.SignalProtocolAddress
 import org.signal.libsignal.protocol.ecc.ECKeyPair
-import org.signal.libsignal.protocol.groups.SenderKeyName
 import org.signal.libsignal.protocol.groups.state.SenderKeyRecord
 import org.signal.libsignal.protocol.groups.state.SenderKeyStore
 import org.signal.libsignal.protocol.kem.KyberPreKeyRecord
@@ -46,7 +45,7 @@ class TorentKeyStore(
     private val signedPreKeys = ConcurrentHashMap<Int, SignedPreKeyRecord>()
     private val kyberPreKeys = ConcurrentHashMap<Int, KyberPreKeyRecord>()
     private val sessions = ConcurrentHashMap<SignalProtocolAddress, SessionRecord>()
-    private val senderKeys = ConcurrentHashMap<SenderKeyName, SenderKeyRecord>()
+    private val senderKeys = ConcurrentHashMap<SignalProtocolAddress, SenderKeyRecord>()
 
     // ── IdentityKeyStore ──────────────────────────────────────────────────────
 
@@ -175,14 +174,14 @@ class TorentKeyStore(
 
     // ── SenderKeyStore (for group messaging — no-op for now) ──────────────────
 
-    override fun loadSenderKey(senderKeyName: SenderKeyName): SenderKeyRecord? =
-        senderKeys[senderKeyName]
+    override fun loadSenderKey(sender: SignalProtocolAddress): SenderKeyRecord? =
+        senderKeys[sender]
 
     override fun storeSenderKey(
-        senderKeyName: SenderKeyName,
+        sender: SignalProtocolAddress,
         record: SenderKeyRecord,
     ) {
-        senderKeys[senderKeyName] = record
+        senderKeys[sender] = record
     }
 
     // ── Lightweight DTOs for extracting public material from records ───────────
