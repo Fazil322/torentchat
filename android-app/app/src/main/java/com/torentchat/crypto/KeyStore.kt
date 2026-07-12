@@ -5,7 +5,12 @@ import org.signal.libsignal.protocol.IdentityKeyPair
 import org.signal.libsignal.protocol.NoSessionException
 import org.signal.libsignal.protocol.SignalProtocolAddress
 import org.signal.libsignal.protocol.ecc.ECKeyPair
+import org.signal.libsignal.protocol.ecc.ECPublicKey
+import org.signal.libsignal.protocol.groups.state.SenderKeyRecord
+import org.signal.libsignal.protocol.groups.state.SenderKeyStore
+import org.signal.libsignal.protocol.kem.KyberPreKeyRecord
 import org.signal.libsignal.protocol.state.IdentityKeyStore
+import org.signal.libsignal.protocol.state.KyberPreKeyStore
 import org.signal.libsignal.protocol.state.PreKeyRecord
 import org.signal.libsignal.protocol.state.PreKeyStore
 import org.signal.libsignal.protocol.state.SessionRecord
@@ -16,31 +21,20 @@ import org.signal.libsignal.protocol.util.KeyHelper
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * In-memory Signal Protocol store (libsignal v0.86.x API).
- * ─────────────────────────────────────────────────────────────────────────────
- * Implements the four core stores: IdentityKey, PreKey, SignedPreKey, Session.
+ * In-memory Signal Protocol store implementing all required interfaces for
+ * libsignal v0.86.x: IdentityKeyStore, PreKeyStore, SignedPreKeyStore,
+ * SessionStore, KyberPreKeyStore, and SenderKeyStore.
  *
- * NOTE: KyberPreKeyStore and SenderKeyStore are NOT implemented yet.
- * SessionCipher in libsignal 0.86.x requires KyberPreKeyStore — when we wire
- * up full E2EE in Phase 2, we'll either:
- *   1. Use a SignalProtocolStore wrapper that provides no-op Kyber/SenderKey
- *      implementations, OR
- *   2. Construct SessionCipher with a custom store bundle.
- *
- * For now, identity/key management + session state works for key generation
- * and pre-key bundle publishing.
- *
- * @param identityKeyPair  generated once at first launch by [IdentityManager]
- * @param registrationId   random 14-bit ID to avoid address collisions
+ * KyberPreKeyStore and SenderKeyStore are implemented as no-ops (we don't use
+ * PQXDH one-time Kyber keys or group sender keys yet), but they must be present
+ * because SessionCipher requires them.
  */
 class TorentKeyStore(
     identityKeyPair: IdentityKeyPair,
     val registrationId: Int,
-) : IdentityKeyStore, PreKeyStore, SignedPreKeyStore, SessionStore {
+) : IdentityKeyStore, PreKeyStore, SignedPreKeyStore, SessionStore, KyberPreKeyStore, SenderKeyStore {
 
-    // Store as private field to avoid JVM signature clash with getIdentityKeyPair() override
     private val _identityKeyPair: IdentityKeyPair = identityKeyPair
-
     private val trustedIdentities = ConcurrentHashMap<SignalProtocolAddress, IdentityKey>()
     private val preKeys = ConcurrentHashMap<Int, PreKeyRecord>()
     private val signedPreKeys = ConcurrentHashMap<Int, SignedPreKeyRecord>()
@@ -67,30 +61,21 @@ class TorentKeyStore(
         identityKey: IdentityKey,
         direction: IdentityKeyStore.Direction,
     ): Boolean {
-        // TOFU (Trust On First Use): a new identity is trusted on first encounter.
         val existing = trustedIdentities[address]
         return existing == null || existing == identityKey
     }
 
-    override fun getIdentity(address: SignalProtocolAddress): IdentityKey? =
-        trustedIdentities[address]
+    override fun getIdentity(address: SignalProtocolAddress): IdentityKey? = trustedIdentities[address]
 
     // ── PreKeyStore ───────────────────────────────────────────────────────────
 
     override fun loadPreKey(preKeyId: Int): PreKeyRecord =
         preKeys[preKeyId] ?: error("Pre-key $preKeyId not found")
 
-    override fun storePreKey(preKeyId: Int, record: PreKeyRecord) {
-        preKeys[preKeyId] = record
-    }
-
+    override fun storePreKey(preKeyId: Int, record: PreKeyRecord) { preKeys[preKeyId] = record }
     override fun containsPreKey(preKeyId: Int): Boolean = preKeys.containsKey(preKeyId)
+    override fun removePreKey(preKeyId: Int) { preKeys.remove(preKeyId) }
 
-    override fun removePreKey(preKeyId: Int) {
-        preKeys.remove(preKeyId)
-    }
-
-    /** @return all remaining one-time pre-keys, for publishing to the signaling relay. */
     fun allPreKeys(): Map<Int, PreKeyRecord> = preKeys.toMap()
 
     // ── SignedPreKeyStore ─────────────────────────────────────────────────────
@@ -98,18 +83,27 @@ class TorentKeyStore(
     override fun loadSignedPreKey(signedPreKeyId: Int): SignedPreKeyRecord =
         signedPreKeys[signedPreKeyId] ?: error("Signed pre-key $signedPreKeyId not found")
 
-    override fun loadSignedPreKeys(): MutableList<SignedPreKeyRecord> =
-        signedPreKeys.values.toMutableList()
+    override fun loadSignedPreKeys(): MutableList<SignedPreKeyRecord> = signedPreKeys.values.toMutableList()
+    override fun storeSignedPreKey(signedPreKeyId: Int, record: SignedPreKeyRecord) { signedPreKeys[signedPreKeyId] = record }
+    override fun containsSignedPreKey(signedPreKeyId: Int): Boolean = signedPreKeys.containsKey(signedPreKeyId)
+    override fun removeSignedPreKey(signedPreKeyId: Int) { signedPreKeys.remove(signedPreKeyId) }
 
-    override fun storeSignedPreKey(signedPreKeyId: Int, record: SignedPreKeyRecord) {
-        signedPreKeys[signedPreKeyId] = record
+    // ── KyberPreKeyStore (no-op — PQXDH not used yet) ─────────────────────────
+
+    override fun loadKyberPreKey(kyberPreKeyId: Int): KyberPreKeyRecord =
+        error("No Kyber pre-keys stored (PQXDH not enabled)")
+
+    override fun loadKyberPreKeys(): MutableList<KyberPreKeyRecord> = mutableListOf()
+
+    override fun storeKyberPreKey(kyberPreKeyId: Int, record: KyberPreKeyRecord) {
+        // No-op: we don't generate Kyber pre-keys. SessionCipher won't call this
+        // for standard X3DH sessions without PQXDH.
     }
 
-    override fun containsSignedPreKey(signedPreKeyId: Int): Boolean =
-        signedPreKeys.containsKey(signedPreKeyId)
+    override fun containsKyberPreKey(kyberPreKeyId: Int): Boolean = false
 
-    override fun removeSignedPreKey(signedPreKeyId: Int) {
-        signedPreKeys.remove(signedPreKeyId)
+    override fun markKyberPreKeyUsed(kyberPreKeyId: Int, signedPreKeyId: Int, baseKey: ECPublicKey) {
+        // No-op
     }
 
     // ── SessionStore ──────────────────────────────────────────────────────────
@@ -123,12 +117,9 @@ class TorentKeyStore(
         sessions[address] = record
     }
 
-    override fun containsSession(address: SignalProtocolAddress): Boolean =
-        sessions.containsKey(address)
+    override fun containsSession(address: SignalProtocolAddress): Boolean = sessions.containsKey(address)
 
-    override fun deleteSession(address: SignalProtocolAddress) {
-        sessions.remove(address)
-    }
+    override fun deleteSession(address: SignalProtocolAddress) { sessions.remove(address) }
 
     override fun deleteAllSessions(name: String) {
         sessions.keys.filter { it.name == name }.forEach { sessions.remove(it) }
@@ -137,30 +128,26 @@ class TorentKeyStore(
     override fun loadExistingSessions(addresses: MutableList<SignalProtocolAddress>): MutableList<SessionRecord> {
         val result = mutableListOf<SessionRecord>()
         for (address in addresses) {
-            val session = sessions[address]
-            if (session != null) {
-                result.add(session)
-            } else {
-                throw NoSessionException("No session for $address")
-            }
+            val session = sessions[address] ?: throw NoSessionException("No session for $address")
+            result.add(session)
         }
         return result
     }
 
-    // ── Lightweight DTOs for extracting public material from records ───────────
+    // ── SenderKeyStore (no-op — group messaging not used yet) ─────────────────
 
-    data class SignedPreKeyData(
-        val id: Int,
-        val publicKeyB64: String,
-        val signatureB64: String,
-    )
+    override fun loadSenderKey(sender: SignalProtocolAddress): SenderKeyRecord? = null
 
-    data class OneTimePreKeyData(
-        val id: Int,
-        val publicKeyB64: String,
-    )
+    override fun storeSenderKey(sender: SignalProtocolAddress, record: SenderKeyRecord) {
+        // No-op
+    }
 
-    // ── Key generation helpers ────────────────────────────────────────────────
+    // ── DTOs ──────────────────────────────────────────────────────────────────
+
+    data class SignedPreKeyData(val id: Int, val publicKeyB64: String, val signatureB64: String)
+    data class OneTimePreKeyData(val id: Int, val publicKeyB64: String)
+
+    // ── Key generation ────────────────────────────────────────────────────────
 
     companion object {
         fun generate(): TorentKeyStore {
@@ -170,17 +157,11 @@ class TorentKeyStore(
         }
 
         fun generatePreKeys(startId: Int, count: Int): List<PreKeyRecord> =
-            (startId until startId + count).map { id ->
-                PreKeyRecord(id, ECKeyPair.generate())
-            }
+            (startId until startId + count).map { PreKeyRecord(it, ECKeyPair.generate()) }
 
-        fun generateSignedPreKey(
-            identityKeyPair: IdentityKeyPair,
-            id: Int,
-        ): SignedPreKeyRecord {
+        fun generateSignedPreKey(identityKeyPair: IdentityKeyPair, id: Int): SignedPreKeyRecord {
             val keyPair = ECKeyPair.generate()
-            val signature = identityKeyPair.privateKey
-                .calculateSignature(keyPair.publicKey.serialize())
+            val signature = identityKeyPair.privateKey.calculateSignature(keyPair.publicKey.serialize())
             return SignedPreKeyRecord(id, System.currentTimeMillis(), keyPair, signature)
         }
     }

@@ -42,6 +42,9 @@ zxingAndroid = "4.3.0"
 # Image loading
 coil = "2.6.0"
 
+# CameraX (QR scanning)
+cameraX = "1.3.4"
+
 # Serialization
 kotlinxSerialization = "1.6.3"
 
@@ -103,6 +106,12 @@ zxing-android-embedded = { group = "com.journeyapps", name = "zxing-android-embe
 
 # Image loading
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+
+# CameraX
+camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "cameraX" }
+camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "cameraX" }
+camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "cameraX" }
+camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "cameraX" }
 
 # Serialization
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }

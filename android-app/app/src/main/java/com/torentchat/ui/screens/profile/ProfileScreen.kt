@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -31,6 +30,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,47 +40,30 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 
-/**
- * The user's own profile / settings screen.
- *
- * Shows the local anonymous identity (random peer id + Signal identity key),
- * a QR code that peers scan to connect, an editable display name, security
- * toggles, and an "about" section with the app version.
- *
- * TODO: wire to a ProfileViewModel (Hilt) that:
- *  - loads the local Peer from IdentityRepository
- *  - generates the QR payload (peerId + identity key fingerprint)
- *  - persists displayName + toggle preferences to SettingsRepository
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
     onBack: () -> Unit,
+    viewModel: ProfileViewModel = hiltViewModel(),
 ) {
-    // TODO: val viewModel: ProfileViewModel = hiltViewModel()
-    //  val peer by viewModel.peer.collectAsStateWithLifecycle()
-    //  val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val peerId by viewModel.peerId.collectAsState()
+    val displayName by viewModel.displayName.collectAsState()
+    val ephemeralMessages by viewModel.ephemeralMessages.collectAsState()
+    val hideOnlineStatus by viewModel.hideOnlineStatus.collectAsState()
 
-    // Mock local identity. peerId is the fingerprint of the Curve25519 public key.
-    val peerId = remember { "7f3a9c2e-b4d1-4a8f-9e0c-1b2d3f4a5b6c" }
-
-    var displayName by remember { mutableStateOf("") } // empty => use peer id
-    var ephemeralMessages by remember { mutableStateOf(true) }
-    var hideOnlineStatus by remember { mutableStateOf(false) }
+    var editingName by remember(displayName) { mutableStateOf(displayName) }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Kembali",
-                        )
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Kembali")
                     }
                 },
-                title = { Text(text = "Profil") },
+                title = { Text("Profil") },
             )
         },
     ) { innerPadding ->
@@ -89,233 +72,102 @@ fun ProfileScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 16.dp),
+                .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            // ── QR code + identity ────────────────────────────────────────────
-            QrCodeCard(
-                peerId = peerId,
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            // ── Display name ──────────────────────────────────────────────────
-            DisplayNameEditor(
-                displayName = displayName,
-                onDisplayNameChange = { displayName = it },
-                onSave = {
-                    // TODO: viewModel.updateDisplayName(displayName)
-                },
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            // ── Keamanan section ──────────────────────────────────────────────
-            SettingsSection(title = "Keamanan") {
-                ToggleRow(
-                    label = "Pesan sementara (auto-hapus)",
-                    checked = ephemeralMessages,
-                    onCheckedChange = {
-                        ephemeralMessages = it
-                        // TODO: viewModel.setEphemeralMessages(it)
-                    },
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-                ToggleRow(
-                    label = "Sembunyikan status online",
-                    checked = hideOnlineStatus,
-                    onCheckedChange = {
-                        hideOnlineStatus = it
-                        // TODO: viewModel.setHideOnlineStatus(it)
-                    },
-                )
-            }
-
-            // ── Tentang section ───────────────────────────────────────────────
-            SettingsSection(title = "Tentang") {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "Versi aplikasi",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text = "TorentChat v0.1.0",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-                // TODO: link to security whitepaper (open external URL).
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "Whitepaper keamanan",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                    Text(
-                        text = "TODO",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(24.dp))
-        }
-    }
-}
-
-/** QR code placeholder card with the user's peer id underneath. */
-@Composable
-private fun QrCodeCard(
-    peerId: String,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        modifier = modifier,
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(16.dp),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            // QR placeholder — real impl renders a ZXing BarcodeEncoder bitmap here.
+            // QR code card
             Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surface,
-                modifier = Modifier.size(180.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.size(200.dp),
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Filled.QrCode2,
-                        contentDescription = "QR Code Anda",
-                        tint = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(96.dp),
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Filled.QrCode2,
+                            "QR Code",
+                            modifier = Modifier.size(120.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            "QR Code Anda",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
+
+            // Peer ID
             Text(
-                text = "QR Code Anda",
-                style = MaterialTheme.typography.bodyLarge,
+                peerId.ifEmpty { "XXXX-XXXX" },
+                style = MaterialTheme.typography.titleLarge,
+                fontFamily = FontFamily.Monospace,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            Text(
-                text = "ID: $peerId",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontFamily = FontFamily.Monospace,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 280.dp),
-            )
-        }
-    }
-}
 
-/** Editable display name field with a save button. */
-@Composable
-private fun DisplayNameEditor(
-    displayName: String,
-    onDisplayNameChange: (String) -> Unit,
-    onSave: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(
-            value = displayName,
-            onValueChange = onDisplayNameChange,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text(text = "Nama tampilan") },
-            placeholder = { Text(text = "(opsional)") },
-            singleLine = true,
-        )
-        Button(
-            onClick = onSave,
-            enabled = displayName.isNotBlank(),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Save,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
+            // Display name editor
+            OutlinedTextField(
+                value = editingName,
+                onValueChange = { editingName = it },
+                label = { Text("Nama tampilan") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
             )
-            Spacer(Modifier.size(8.dp))
-            Text(text = "Simpan nama")
-        }
-    }
-}
-
-/** A titled settings container with a card surface. */
-@Composable
-private fun SettingsSection(
-    title: String,
-    content: @Composable () -> Unit,
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 4.dp),
-        )
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            shape = RoundedCornerShape(12.dp),
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
+            Button(
+                onClick = { viewModel.updateDisplayName(editingName) },
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                content()
+                Icon(Icons.Filled.Save, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.size(8.dp))
+                Text("Simpan")
             }
-        }
-    }
-}
 
-/** A label + Switch row used inside [SettingsSection]. */
-@Composable
-private fun ToggleRow(
-    label: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f),
-        )
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+            HorizontalDivider()
+            Text(
+                "Keamanan",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            // Toggles
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Pesan sementara (auto-hapus)")
+                Switch(
+                    checked = ephemeralMessages,
+                    onCheckedChange = { viewModel.toggleEphemeralMessages() },
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Sembunyikan status online")
+                Switch(
+                    checked = hideOnlineStatus,
+                    onCheckedChange = { viewModel.toggleHideOnlineStatus() },
+                )
+            }
+
+            HorizontalDivider()
+            Text("Tentang", style = MaterialTheme.typography.titleLarge, modifier = Modifier.fillMaxWidth())
+            Text(
+                "TorentChat v0.1.0",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                "Pesan terenkripsi end-to-end dengan Signal Protocol",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }

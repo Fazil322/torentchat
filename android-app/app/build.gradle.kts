@@ -120,6 +120,12 @@ dependencies {
     // ── Image loading ──────────────────────────────────────────────────────
     implementation(libs.coil.compose)
 
+    // ── CameraX (QR scanning) ───────────────────────────────────────────────
+    implementation(libs.camera.core)
+    implementation(libs.camera.camera2)
+    implementation(libs.camera.lifecycle)
+    implementation(libs.camera.view)
+
     // ── Serialization ──────────────────────────────────────────────────────
     implementation(libs.kotlinx.serialization.json)
 

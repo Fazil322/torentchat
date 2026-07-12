@@ -31,8 +31,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -41,76 +41,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.torentchat.domain.model.Message
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.torentchat.data.local.entity.MessageEntity
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/**
- * The active chat screen for a single conversation.
- *
- * Renders an end-to-end-encrypted thread of decrypted [Message] bubbles. The
- * outgoing/incoming alignment + colors visually reinforce which messages are
- * ours. A bottom input bar composes and sends new text messages.
- *
- * TODO: wire to a ChatViewModel (Hilt) that:
- *  - loads the conversation + peer display name from ConversationRepository
- *  - observes MessageRepository.streamMessages(conversationId)
- *  - exposes send(message) which encrypts via SignalSession + dispatches over the WebRTC data channel
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
     conversationId: String,
     onBack: () -> Unit,
+    viewModel: ChatViewModel = hiltViewModel(),
 ) {
-    // TODO: val viewModel: ChatViewModel = hiltViewModel()
-    //  val messages by viewModel.messages.collectAsStateWithLifecycle()
-    //  val peerName by viewModel.peerDisplayName.collectAsStateWithLifecycle()
-
-    val peerDisplayName = remember { "Alya" } // TODO: from ViewModel
-
+    val messages by viewModel.messages.collectAsState()
+    val conversation by viewModel.conversation.collectAsState()
     val listState = rememberLazyListState()
 
-    // Mock message thread. Real impl replaces this with the ViewModel stream.
-    val messages = remember {
-        mutableStateListOf(
-            Message(
-                id = "m1",
-                conversationId = conversationId,
-                senderId = "peer-alya",
-                content = "Hai, sudah nyoba versi barunya?",
-                timestamp = 1_719_800_000_000L,
-                isOutgoing = false,
-            ),
-            Message(
-                id = "m2",
-                conversationId = conversationId,
-                senderId = "self",
-                content = "Belum, link-nya mana?",
-                timestamp = 1_719_800_060_000L,
-                isOutgoing = true,
-            ),
-            Message(
-                id = "m3",
-                conversationId = conversationId,
-                senderId = "peer-alya",
-                content = "Aku kirim lewat data channel aja ya, lebih aman.",
-                timestamp = 1_719_800_120_000L,
-                isOutgoing = false,
-            ),
-            Message(
-                id = "m4",
-                conversationId = conversationId,
-                senderId = "self",
-                content = "Oke, tunggu di sini.",
-                timestamp = 1_719_800_180_000L,
-                isOutgoing = true,
-            ),
-        )
-    }
-
-    // Auto-scroll to the newest message whenever the list grows.
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.lastIndex)
@@ -118,25 +65,23 @@ fun ChatScreen(
     }
 
     var draft by remember { mutableStateOf("") }
+    val peerDisplayName = conversation?.title ?: "Chat"
 
     Scaffold(
         topBar = {
             TopAppBar(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Kembali",
-                        )
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Kembali")
                     }
                 },
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = peerDisplayName)
+                        Text(peerDisplayName)
                         Spacer(Modifier.size(6.dp))
                         Icon(
-                            imageVector = Icons.Filled.Shield,
-                            contentDescription = "Terenkripsi end-to-end",
+                            Icons.Filled.Shield,
+                            "Terenkripsi end-to-end",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(18.dp),
                         )
@@ -148,80 +93,51 @@ fun ChatScreen(
             MessageInputBar(
                 text = draft,
                 onTextChange = { draft = it },
-                onAttachClick = { /* TODO: open image picker / file chooser */ },
+                onAttachClick = { },
                 onSendClick = {
                     if (draft.isNotBlank()) {
-                        sendMessage(draft, conversationId, messages)
+                        viewModel.sendMessage(draft)
                         draft = ""
                     }
                 },
             )
         },
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-        ) {
-            // E2E encryption notice banner.
-            EncryptionBanner(modifier = Modifier.fillMaxWidth())
+        Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+            ) {
+                Text(
+                    "\uD83D\uDD10 Terenkripsi end-to-end",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                )
+            }
 
             LazyColumn(
                 state = listState,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    horizontal = 12.dp,
-                    vertical = 8.dp,
-                ),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp, 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items(
-                    items = messages,
-                    key = { it.id },
-                ) { message ->
-                    MessageBubble(message = message)
+                items(items = messages, key = { it.id }) { message ->
+                    MessageBubble(message)
                 }
             }
         }
     }
 }
 
-/** Banner asserting E2E encryption for this conversation. */
 @Composable
-private fun EncryptionBanner(modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier,
-        color = MaterialTheme.colorScheme.surfaceVariant,
-    ) {
-        Text(
-            text = "\uD83D\uDD10 Terenkripsi end-to-end",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 6.dp),
-        )
-    }
-}
-
-/** A single message bubble, right-aligned if outgoing, left-aligned if incoming. */
-@Composable
-private fun MessageBubble(message: Message) {
+private fun MessageBubble(message: MessageEntity) {
     val isOutgoing = message.isOutgoing
-    val bubbleColor = if (isOutgoing) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant
-    }
-    val onBubbleColor = if (isOutgoing) {
-        MaterialTheme.colorScheme.onPrimary
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    val timeText = formatTimestamp(message.timestamp)
+    val bubbleColor = if (isOutgoing) MaterialTheme.colorScheme.primary
+                      else MaterialTheme.colorScheme.surfaceVariant
+    val onBubbleColor = if (isOutgoing) MaterialTheme.colorScheme.onPrimary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -236,20 +152,13 @@ private fun MessageBubble(message: Message) {
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.clip(RoundedCornerShape(16.dp)),
             ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                ) {
+                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    Text(message.content, style = MaterialTheme.typography.bodyLarge, color = onBubbleColor)
                     Text(
-                        text = message.content,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = onBubbleColor,
-                    )
-                    Text(
-                        text = timeText,
+                        formatTimestamp(message.timestamp),
                         style = MaterialTheme.typography.labelSmall,
                         color = onBubbleColor.copy(alpha = 0.7f),
-                        modifier = Modifier
-                            .padding(top = 2.dp)
+                        modifier = Modifier.padding(top = 2.dp)
                             .align(if (isOutgoing) Alignment.End else Alignment.Start),
                     )
                 }
@@ -258,7 +167,6 @@ private fun MessageBubble(message: Message) {
     }
 }
 
-/** Bottom input bar: attach + text field + send. */
 @Composable
 private fun MessageInputBar(
     text: String,
@@ -266,78 +174,35 @@ private fun MessageInputBar(
     onAttachClick: () -> Unit,
     onSendClick: () -> Unit,
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 2.dp,
-    ) {
+    Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .imePadding()
+            modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()
                 .padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             IconButton(onClick = onAttachClick) {
-                Icon(
-                    imageVector = Icons.Filled.Add,
-                    contentDescription = "Lampirkan gambar",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Icon(Icons.Filled.Add, "Lampirkan gambar",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             OutlinedTextField(
                 value = text,
                 onValueChange = onTextChange,
                 modifier = Modifier.weight(1f),
-                placeholder = { Text(text = "Pesan...") },
+                placeholder = { Text("Pesan...") },
                 maxLines = 4,
                 shape = RoundedCornerShape(20.dp),
             )
-            IconButton(
-                onClick = onSendClick,
-                enabled = text.isNotBlank(),
-            ) {
+            IconButton(onClick = onSendClick, enabled = text.isNotBlank()) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.Send,
-                    contentDescription = "Kirim",
-                    tint = if (text.isNotBlank()) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
+                    Icons.AutoMirrored.Outlined.Send, "Kirim",
+                    tint = if (text.isNotBlank()) MaterialTheme.colorScheme.primary
+                           else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
     }
 }
 
-/**
- * Appends a new outgoing message to the thread.
- *
- * TODO: real impl delegates to ChatViewModel.send(content), which encrypts the
- * payload with the active Signal session and dispatches it over the peer's
- * WebRTC data channel. The returned local message id tracks SENT/DELIVERED state.
- */
-private fun sendMessage(
-    content: String,
-    conversationId: String,
-    messages: androidx.compose.runtime.snapshots.SnapshotStateList<Message>,
-) {
-    messages.add(
-        Message(
-            id = "local-${System.currentTimeMillis()}",
-            conversationId = conversationId,
-            senderId = "self",
-            content = content,
-            timestamp = System.currentTimeMillis(),
-            isOutgoing = true,
-        )
-    )
-}
-
-/** Formats epoch-millis to HH:mm. TODO: shared util. */
-private fun formatTimestamp(timestamp: Long): String {
-    val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
-    return sdf.format(Date(timestamp))
-}
+private fun formatTimestamp(timestamp: Long): String =
+    SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(timestamp))

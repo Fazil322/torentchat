@@ -25,12 +25,12 @@ sealed class Destinations(val route: String) {
 }
 
 @Composable
-fun TorentChatNavHost() {
+fun TorentChatNavHost(startOnboarding: Boolean = true) {
     val navController = rememberNavController()
 
     NavHost(
         navController = navController,
-        startDestination = Destinations.Onboarding.route,
+        startDestination = if (startOnboarding) Destinations.Onboarding.route else Destinations.Conversations.route,
     ) {
         composable(Destinations.Onboarding.route) {
             OnboardingScreen(

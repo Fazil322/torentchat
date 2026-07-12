@@ -16,7 +16,6 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // org.signal:libsignal-android is on Maven Central since 0.15.0
     }
 }
 
