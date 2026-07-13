@@ -86,6 +86,8 @@ jobs:
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-30 build-tools;30.0.3'
       - name: Install cargo-apk
         run: cargo install -q cargo-apk
       - name: Build APK
@@ -147,14 +149,23 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      - name: Install worker-build
-        run: cargo install -q worker-build
-      - name: Clear cache and build with newer wasm-bindgen
+      - name: Install wasm-bindgen-cli
+        run: cargo install -q wasm-bindgen-cli --version 0.2.95
+      - name: Build Rust to WASM
+        working-directory: rust-workspace
+        run: cargo build --release --lib --target wasm32-unknown-unknown -p torentchat-worker
+      - name: Generate JS bindings
+        working-directory: rust-workspace
+        run: |
+          mkdir -p worker/build/worker
+          wasm-bindgen --no-typescript --target module --out-name index --out-dir worker/build/worker --experimental-reset-state-function target/wasm32-unknown-unknown/release/torentchat_worker.wasm
+      - name: Create shim.mjs
         working-directory: rust-workspace/worker
         run: |
-          rm -rf ~/.cache/worker-build
-          export WASM_BINDGEN_VERSION=0.2.95
-          worker-build --release
+          cat > build/worker/shim.mjs << 'SHIM'
+          import * as wasm from './index.js';
+          export default { fetch: wasm.fetch };
+          SHIM
       - name: Deploy to Cloudflare
         working-directory: rust-workspace/worker
         run: npx wrangler deploy
