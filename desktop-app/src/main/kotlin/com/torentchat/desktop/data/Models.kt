@@ -30,6 +30,6 @@ data class Message(
 data class Contact(
     val peerId: String,
     val displayName: String?,
-    val identityKey: String,
+    val identityKey: String?,
     val addedAt: Long = System.currentTimeMillis(),
 )

@@ -52,5 +52,5 @@ class LocalStore(private val dataDir: Path) {
     fun updateStatus(mid: String, s: String) { val i = msgs.indexOfFirst { it.id == mid }; if (i >= 0) { msgs[i] = msgs[i].copy(status = s); persist() } }
     private fun updatePreview(cid: String, p: String, ts: Long) { val i = convs.indexOfFirst { it.id == cid }; if (i >= 0) { convs[i].lastMessagePreview = p; convs[i].lastMessageTimestamp = ts } }
 
-    fun addContact(pid: String, dn: String?, ik: String) { if (contacts.none { it.peerId == pid }) { contacts.add(Contact(pid, dn, ik)); persist() } }
+    fun addContact(pid: String, dn: String?, ik: String?) { if (contacts.none { it.peerId == pid }) { contacts.add(Contact(pid, dn, ik)); persist() } }
 }

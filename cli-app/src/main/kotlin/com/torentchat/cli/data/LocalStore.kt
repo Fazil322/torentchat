@@ -10,7 +10,7 @@ import java.util.UUID
 
 @Serializable data class Conversation(val id: String, val title: String, val peerIds: String, var lastPreview: String? = null, var lastTs: Long? = null)
 @Serializable data class Message(val id: String, val cid: String, val sender: String, val content: String, val ts: Long, var status: String = "SENDING", val out: Boolean)
-@Serializable data class Contact(val peerId: String, val name: String?, val identityKey: String)
+@Serializable data class Contact(val peerId: String, val name: String?, val identityKey: String?)
 
 class LocalStore(private val dir: Path) {
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true; encodeDefaults = true }
@@ -47,5 +47,5 @@ class LocalStore(private val dir: Path) {
         msgs.add(Message(UUID.randomUUID().toString(), cid, sender, content, System.currentTimeMillis(), "DELIVERED", false))
         convs.find { it.id == cid }?.let { it.lastPreview = content; it.lastTs = System.currentTimeMillis() }; save()
     }
-    fun addContact(pid: String, name: String?, ik: String) { if (contacts.none { it.peerId == pid }) { contacts.add(Contact(pid, name, ik)); save() } }
+    fun addContact(pid: String, name: String?, ik: String?) { if (contacts.none { it.peerId == pid }) { contacts.add(Contact(pid, name, ik)); save() } }
 }

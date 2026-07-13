@@ -114,7 +114,7 @@ fun main() = runBlocking {
                     val rid = conv?.peerIds ?: ""
                     if (rid.isNotEmpty()) {
                         print("${DIM}→ sending...$RESET\r")
-                        runBlocking { chat.sendMessage(rid, line) }
+                        chat.sendMessage(rid, line)
                         println("${CYAN}→ [${SimpleDateFormat("HH:mm").format(Date())}] $line$RESET")
                     }
                 } else {

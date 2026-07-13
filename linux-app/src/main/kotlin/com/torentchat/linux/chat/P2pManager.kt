@@ -14,7 +14,17 @@ class P2pManager(private val signaling: SignalingClient) {
 
     fun initialize(peerId: String, scope: CoroutineScope) {
         localPeerId = peerId
-        pollJob = scope.launch { while (isActive) { try { signaling.pollSignaling(localPeerId) } catch (_: Exception) {}; delay(3000) } }
+        pollJob = scope.launch {
+            while (isActive) {
+                try {
+                    val response = signaling.pollSignaling(localPeerId)
+                    for (msg in response.messages) {
+                        println("[TorentChat] Signaling: ${msg.type} from ${msg.from}")
+                    }
+                } catch (_: Exception) {}
+                delay(3000)
+            }
+        }
         pendingJob = scope.launch {
             while (isActive) {
                 try {

@@ -29,7 +29,15 @@ class ChatService(
 
         // Poll signaling
         pollJob = scope.launch {
-            while (isActive) { try { signaling.pollSignaling(localPeerId) } catch (_: Exception) {}; delay(3000) }
+            while (isActive) {
+                try {
+                    val response = signaling.pollSignaling(localPeerId)
+                    for (msg in response.messages) {
+                        println("[TorentChat] Signaling: ${msg.type} from ${msg.from}")
+                    }
+                } catch (_: Exception) {}
+                delay(3000)
+            }
         }
         // Drain pending E2E envelopes
         pendingJob = scope.launch {
@@ -64,7 +72,7 @@ class ChatService(
     }
 
     fun createConversationWithPeer(remotePeerId: String) {
-        store.addContact(remotePeerId, null, "pending")
+        store.addContact(remotePeerId, null, null)
         store.createDirectConv(localPeerId, remotePeerId)
     }
 

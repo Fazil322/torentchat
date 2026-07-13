@@ -33,7 +33,10 @@ class P2pManager(
         pollJob = scope.launch {
             while (isActive) {
                 try {
-                    signalingClient.pollSignaling(localPeerId)
+                    val response = signalingClient.pollSignaling(localPeerId)
+                    for (msg in response.messages) {
+                        println("[TorentChat] Signaling: ${msg.type} from ${msg.from}")
+                    }
                 } catch (_: Exception) {}
                 delay(3000)
             }

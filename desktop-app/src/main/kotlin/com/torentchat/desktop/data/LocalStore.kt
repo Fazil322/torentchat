@@ -80,7 +80,7 @@ class LocalStore(private val dataDir: Path) {
 
     // ── Contacts ───────────────────────────────────────────────────────────────
     fun getContacts(): List<Contact> = contacts
-    fun addContact(peerId: String, displayName: String?, identityKey: String) {
+    fun addContact(peerId: String, displayName: String?, identityKey: String?) {
         if (contacts.none { it.peerId == peerId }) {
             contacts.add(Contact(peerId, displayName, identityKey)); persist()
         }

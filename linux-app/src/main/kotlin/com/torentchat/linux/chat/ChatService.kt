@@ -56,10 +56,15 @@ class ChatService(
         }
     }
 
-    fun createConversationWithPeer(rid: String, ik: String) {
+    fun createConversationWithPeer(rid: String, ik: String?) {
         store.addContact(rid, null, ik)
         store.createDirectConversation(localPeerId, rid, rid)
         refresh()
+    }
+
+    fun updateDisplayName(name: String?) {
+        idMgr.updateDisplayName(name)
+        _identity.value = idMgr.currentIdentity
     }
 
     private fun refresh() { _convs.value = store.getConversations() }

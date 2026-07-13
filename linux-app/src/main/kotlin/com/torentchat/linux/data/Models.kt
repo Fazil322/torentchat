@@ -16,4 +16,4 @@ data class Message(
 )
 
 @Serializable
-data class Contact(val peerId: String, val displayName: String?, val identityKey: String, val addedAt: Long = System.currentTimeMillis())
+data class Contact(val peerId: String, val displayName: String?, val identityKey: String?, val addedAt: Long = System.currentTimeMillis())

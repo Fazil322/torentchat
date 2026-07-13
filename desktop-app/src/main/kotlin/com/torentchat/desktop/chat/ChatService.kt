@@ -81,10 +81,15 @@ class ChatService(
         }
     }
 
-    fun createConversationWithPeer(remotePeerId: String, identityKey: String) {
+    fun createConversationWithPeer(remotePeerId: String, identityKey: String?) {
         store.addContact(remotePeerId, null, identityKey)
         val convId = store.createDirectConversation(localPeerId, remotePeerId, remotePeerId)
         refreshConversations()
+    }
+
+    fun updateDisplayName(name: String?) {
+        identityManager.updateDisplayName(name)
+        _identityState.value = identityManager.currentIdentity
     }
 
     private fun refreshConversations() { _conversations.value = store.getConversations() }

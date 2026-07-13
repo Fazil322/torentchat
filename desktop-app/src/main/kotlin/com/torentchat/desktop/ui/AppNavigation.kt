@@ -196,7 +196,7 @@ fun ScanScreen(chatService: ChatService, onBack: () -> Unit) {
             }
             Text("Masukkan ID teman secara manual:", color = MaterialTheme.colorScheme.onSurface)
             OutlinedTextField(manualId, { manualId = it }, placeholder = { Text("Contoh: K7M3-PQ9X") }, singleLine = true)
-            Button({ if (manualId.isNotBlank()) { chatService.createConversationWithPeer(manualId, "pending"); onBack() } },
+            Button({ if (manualId.isNotBlank()) { chatService.createConversationWithPeer(manualId, null); onBack() } },
                 enabled = manualId.isNotBlank()) { Text("Hubungkan") }
         }
     }
@@ -248,7 +248,7 @@ fun ProfileScreen(chatService: ChatService, onBack: () -> Unit) {
             Text("Peer ID Anda:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(peerId, style = MaterialTheme.typography.headlineSmall, fontFamily = FontFamily.Monospace)
             OutlinedTextField(name, { name = it }, label = { Text("Nama tampilan") }, singleLine = true)
-            Button({ identity?.let { /* TODO: persist via IdentityManager */ } }) { Text("Simpan") }
+            Button({ chatService.updateDisplayName(name) }) { Text("Simpan") }
             HorizontalDivider()
             Text("TorentChat Desktop v0.1.0", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("Pesan terenkripsi end-to-end dengan Signal Protocol", color = MaterialTheme.colorScheme.onSurfaceVariant)

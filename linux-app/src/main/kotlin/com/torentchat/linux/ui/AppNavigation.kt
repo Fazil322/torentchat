@@ -54,7 +54,7 @@ fun OnboardingScreen(chat: ChatService, onDone: () -> Unit) {
                 Text("🔐 Identitas acak. Tanpa email/telepon.", Modifier.padding(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Spacer(Modifier.height(32.dp))
-            Button({ gen = true; scope.launch { chat.initialize(kotlinx.coroutines.GlobalScope); onDone() } }, enabled = !gen, modifier = Modifier.fillMaxWidth().height(50.dp)) {
+            Button({ gen = true; onDone() }, enabled = !gen, modifier = Modifier.fillMaxWidth().height(50.dp)) {
                 if (gen) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Text("Buat Identitas")
             }
         }
@@ -155,7 +155,7 @@ fun ScanScreen(chat: ChatService, onBack: () -> Unit) {
             Icon(Icons.Default.QrCode, null, Modifier.size(100.dp), tint = MaterialTheme.colorScheme.surfaceVariant)
             Text("Masukkan ID teman:", color = MaterialTheme.colorScheme.onSurface)
             OutlinedTextField(id, { id = it }, placeholder = { Text("Contoh: K7M3-PQ9X") }, singleLine = true)
-            Button({ if (id.isNotBlank()) { chat.createConversationWithPeer(id, "pending"); onBack() } }, enabled = id.isNotBlank()) { Text("Hubungkan") }
+            Button({ if (id.isNotBlank()) { chat.createConversationWithPeer(id, null); onBack() } }, enabled = id.isNotBlank()) { Text("Hubungkan") }
         }
     }
 }
@@ -180,7 +180,7 @@ fun ProfileScreen(chat: ChatService, onBack: () -> Unit) {
             Text("Peer ID:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(pid, style = MaterialTheme.typography.headlineSmall, fontFamily = FontFamily.Monospace)
             OutlinedTextField(name, { name = it }, label = { Text("Nama tampilan") }, singleLine = true)
-            Button({}) { Text("Simpan") }
+            Button({ chat.updateDisplayName(name) }) { Text("Simpan") }
             HorizontalDivider()
             Text("TorentChat Linux v0.1.0", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("Signal Protocol + Cloudflare Workers", color = MaterialTheme.colorScheme.onSurfaceVariant)
