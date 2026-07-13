@@ -4,3 +4,7 @@ out/
 vercel.json
 .env*.local
 next-env.d.ts
+
+.vercel
+.env*
+.vercel/
