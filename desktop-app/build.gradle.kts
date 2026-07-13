@@ -36,9 +36,6 @@ dependencies {
     // Signal Protocol (E2EE) — JVM compatible
     implementation("org.signal:libsignal-client:0.86.5")
 
-    // WebRTC for Desktop (JVM)
-    implementation("dev.onvoid.webrtc:onvoid-webrtc:0.7.0")
-
     // QR code generation
     implementation("com.google.zxing:core:3.5.3")
 

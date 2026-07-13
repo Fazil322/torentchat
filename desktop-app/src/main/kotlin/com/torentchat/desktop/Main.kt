@@ -2,6 +2,7 @@ package com.torentchat.desktop
 
 import androidx.compose.runtime.*
 import androidx.compose.ui.window.*
+import androidx.compose.ui.unit.dp
 import com.torentchat.desktop.chat.ChatService
 import com.torentchat.desktop.config.AppConfig
 import com.torentchat.desktop.data.LocalStore
@@ -20,21 +21,13 @@ fun main() = application {
     val signalingClient = SignalingClient(AppConfig.RELAY_URL)
     val chatService = ChatService(identityManager, store, signalingClient)
 
-    // Initialize on startup
     LaunchedEffect(Unit) { chatService.initialize(appScope) }
 
     Window(
-        onCloseRequest = {
-            chatService.shutdown()
-            exitApplication()
-        },
+        onCloseRequest = { chatService.shutdown(); exitApplication() },
         title = "TorentChat — Encrypted P2P Chat",
         state = WindowState(width = 900.dp, height = 650.dp),
     ) {
-        TorentChatTheme {
-            AppNavigation(chatService)
-        }
+        TorentChatTheme { AppNavigation(chatService) }
     }
 }
-
-private val androidx.compose.ui.unit.Dp.dp get() = this
