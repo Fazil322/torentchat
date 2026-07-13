@@ -1,6 +1,5 @@
-// TorentChat Worker — Rust on Cloudflare Workers (compiled to WASM)
-// Replaces the TypeScript Worker. Same API, same KV namespaces.
-// Deploy with: npx wrangler deploy
+// TorentChat Worker — Rust on Cloudflare Workers (WASM, workers-rs 0.8)
+// Same API as old TypeScript Worker. Same KV namespaces.
 
 use serde::{Deserialize, Serialize};
 use worker::*;
@@ -29,31 +28,28 @@ struct SignalingReq { from: String, to: String, sdp: Option<String>, candidate: 
 #[derive(Deserialize)]
 struct PresenceReq { peer_id: String, typing: Option<bool> }
 
-fn now_ts() -> u64 {
-    js_sys::Date::now() as u64
-}
+fn now_ts() -> u64 { Date::now() as u64 }
+
+fn rand_id() -> String { format!("{}{}", now_ts(), now_ts() % 100000) }
 
 #[event(fetch)]
 async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let router = Router::new();
-
     router
         .get_async("/health", |_, _| async move {
             Response::from_json(&serde_json::json!({"ok": true, "service": "torentchat-worker-rust", "ts": now_ts()}))
         })
-        // ── Pending (offline E2E message cache) ─────────────────────────────
         .post_async("/v1/pending", |mut req, env| async move {
             let body: StorePendingReq = req.json().await?;
-            let env_str = env.kv("PENDING")?;
+            let kv = env.kv("PENDING")?;
             let list_key = format!("pending-list:{}", body.to);
-            let queue: Vec<String> = env_str.get(&list_key).json().await.unwrap_or_default();
+            let queue: Vec<String> = kv.get(&list_key).json().await.unwrap_or_default();
             let mut queue = queue;
             let entry_key = format!("pending:{}:{}:{}", body.to, now_ts(), rand_id());
             let entry = PendingEnvelope { from: body.from, envelope: body.envelope, ts: now_ts() };
-            env_str.put(&entry_key, serde_json::to_string(&entry)?)?
-                .expiration_ttl(604800).execute().await?;
+            kv.put(&entry_key, serde_json::to_string(&entry)?)?.expiration_ttl(604800).execute().await?;
             queue.push(entry_key);
-            env_str.put(&list_key, serde_json::to_string(&queue)?)?.execute().await?;
+            kv.put(&list_key, serde_json::to_string(&queue)?)?.execute().await?;
             Response::from_json(&serde_json::json!({"ok": true}))
         })
         .get_async("/v1/pending/:peer_id", |_, env, ctx| async move {
@@ -64,8 +60,8 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             let mut envelopes = Vec::new();
             for key in &queue {
                 if let Ok(Some(raw)) = kv.get(key).text().await {
-                    if let Ok(env_data) = serde_json::from_str::<PendingEnvelope>(&raw) {
-                        envelopes.push(env_data);
+                    if let Ok(e) = serde_json::from_str::<PendingEnvelope>(&raw) {
+                        envelopes.push(e);
                     }
                 }
                 let _ = kv.delete(key).await;
@@ -73,20 +69,19 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             let _ = kv.delete(&list_key).await;
             Response::from_json(&PendingResponse { peer_id, count: envelopes.len(), envelopes })
         })
-        // ── Signaling (SDP/ICE relay via single queue key) ──────────────────
         .post_async("/v1/signaling/offer", |mut req, env| async move {
             let body: SignalingReq = req.json().await?;
-            append_signaling(&env, &body.to, "offer", &body.from, &body.sdp.unwrap_or_default()).await?;
+            append_sig(&env, &body.to, "offer", &body.from, &body.sdp.unwrap_or_default()).await?;
             Response::from_json(&serde_json::json!({"ok": true}))
         })
         .post_async("/v1/signaling/answer", |mut req, env| async move {
             let body: SignalingReq = req.json().await?;
-            append_signaling(&env, &body.to, "answer", &body.from, &body.sdp.unwrap_or_default()).await?;
+            append_sig(&env, &body.to, "answer", &body.from, &body.sdp.unwrap_or_default()).await?;
             Response::from_json(&serde_json::json!({"ok": true}))
         })
         .post_async("/v1/signaling/ice", |mut req, env| async move {
             let body: SignalingReq = req.json().await?;
-            append_signaling(&env, &body.to, "ice", &body.from, &body.candidate.unwrap_or_default()).await?;
+            append_sig(&env, &body.to, "ice", &body.from, &body.candidate.unwrap_or_default()).await?;
             Response::from_json(&serde_json::json!({"ok": true}))
         })
         .get_async("/v1/signaling/poll", |req, env| async move {
@@ -95,13 +90,10 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             let kv = env.kv("SIGNALING")?;
             let queue_key = format!("sig-queue:{}", peer_id);
             let raw = kv.get(&queue_key).text().await.unwrap_or(None);
-            let messages: Vec<SignalingMsg> = raw
-                .and_then(|s| serde_json::from_str(&s).ok())
-                .unwrap_or_default();
+            let messages: Vec<SignalingMsg> = raw.and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
             let _ = kv.delete(&queue_key).await;
             Response::from_json(&PollResponse { peer_id, messages })
         })
-        // ── Presence ────────────────────────────────────────────────────────
         .post_async("/v1/presence", |mut req, env| async move {
             let body: PresenceReq = req.json().await?;
             let kv = env.kv("PRESENCE")?;
@@ -127,29 +119,16 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 None => Response::from_json(&PresenceResponse { peer_id, online: false, typing: false, ts: 0 }),
             }
         })
-        .run(req, env)
-        .await
+        .run(req, env).await
 }
 
-async fn append_signaling(env: &Env, to: &str, msg_type: &str, from: &str, payload: &str) -> Result<()> {
+async fn append_sig(env: &Env, to: &str, msg_type: &str, from: &str, payload: &str) -> Result<()> {
     let kv = env.kv("SIGNALING")?;
     let queue_key = format!("sig-queue:{}", to);
     let raw = kv.get(&queue_key).text().await.unwrap_or(None);
-    let mut messages: Vec<SignalingMsg> = raw
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default();
-    messages.push(SignalingMsg {
-        msg_type: msg_type.to_string(),
-        from: from.to_string(),
-        payload: payload.to_string(),
-    });
+    let mut messages: Vec<SignalingMsg> = raw.and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+    messages.push(SignalingMsg { msg_type: msg_type.into(), from: from.into(), payload: payload.into() });
     while messages.len() > 50 { messages.remove(0); }
-    kv.put(&queue_key, serde_json::to_string(&messages)?)?
-        .expiration_ttl(60).execute().await?;
+    kv.put(&queue_key, serde_json::to_string(&messages)?)?.expiration_ttl(60).execute().await?;
     Ok(())
-}
-
-fn rand_id() -> String {
-    let now = now_ts();
-    format!("{}{}", now, now % 100000)
 }
