@@ -3,12 +3,7 @@ name: Build Rust (All Platforms)
 on:
   push:
     branches: [main, master]
-    paths: ['rust-workspace/**', '.github/workflows/build-rust-all.yml']
   workflow_dispatch:
-
-defaults:
-  run:
-    working-directory: rust-workspace
 
 jobs:
   build-cli:
@@ -29,8 +24,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-        with: { targets: ${{ matrix.target }} }
-      - run: cargo build --release --bin torentchat --target ${{ matrix.target }}
+        with:
+          targets: ${{ matrix.target }}
+      - name: Build CLI
+        run: cargo build --release --bin torentchat --target ${{ matrix.target }}
+        working-directory: rust-workspace
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
@@ -54,11 +52,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-        with: { targets: ${{ matrix.target }} }
+        with:
+          targets: ${{ matrix.target }}
       - name: Install Linux deps
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
-      - run: cargo build --release --bin torentchat-desktop --target ${{ matrix.target }}
+      - name: Build Desktop
+        run: cargo build --release --bin torentchat-desktop --target ${{ matrix.target }}
+        working-directory: rust-workspace
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
@@ -70,19 +71,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo build --release --bin torentchat-web
+      - name: Build Web
+        run: cargo build --release --bin torentchat-web
+        working-directory: rust-workspace
       - uses: actions/upload-artifact@v4
         with:
           name: torentchat-web-server
           path: rust-workspace/target/release/torentchat-web
 
   deploy-worker:
-    name: Deploy Rust Worker to Cloudflare
+    name: Deploy Rust Worker
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-        with: { targets: wasm32-unknown-unknown }
+        with:
+          targets: wasm32-unknown-unknown
       - name: Install worker-build
         run: cargo install -q worker-build
       - name: Build Worker
