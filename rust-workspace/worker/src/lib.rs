@@ -40,7 +40,7 @@ fn ok_json() -> Result<Response> {
 }
 
 #[event(fetch)]
-async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
+async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let method = req.method();
     let url = req.url()?;
     let path = url.path().to_string();

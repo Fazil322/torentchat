@@ -71,7 +71,8 @@ impl eframe::App for App {
                             if ui.button(format!("{}: {}", c.title, c.last_preview.as_deref().unwrap_or("(no messages)"))).clicked() {
                                 self.selected_peer = c.peer_id.clone();
                                 let cid = conv_id(&self.peer_id, &c.peer_id);
-                                let msgs = chat.messages_blocking(&cid);
+                                let s = chat.store.blocking_read();
+                                let msgs: Vec<_> = s.messages.iter().filter(|m| m.cid == cid).collect();
                                 self.messages = msgs.iter().map(|m| (m.sender.clone(), m.content.clone(), m.out)).collect();
                                 self.screen = Screen::Chat;
                             }
@@ -133,14 +134,6 @@ impl eframe::App for App {
                 }
             }
         });
-    }
-}
-
-// Helper for blocking message fetch
-impl Chat {
-    fn messages_blocking(&self, cid: &str) -> Vec<torentchat_core::data::Message> {
-        let s = self.store.blocking_read();
-        s.messages.iter().filter(|m| m.cid == cid).cloned().collect()
     }
 }
 
