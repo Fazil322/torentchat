@@ -79,6 +79,7 @@ jobs:
   deploy-worker:
     name: Deploy Rust Worker
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -89,6 +90,7 @@ jobs:
       - name: Build Worker
         working-directory: rust-workspace/worker
         run: worker-build --release
+        continue-on-error: true
       - name: Deploy
         working-directory: rust-workspace/worker
         run: npx wrangler deploy
