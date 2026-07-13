@@ -47,5 +47,14 @@ class TorentKeyStore(
 
     companion object {
         fun generate() = TorentKeyStore(IdentityKeyPair.generate(), KeyHelper.generateRegistrationId(false))
+
+        fun generatePreKeys(startId: Int, count: Int): List<PreKeyRecord> =
+            (startId until startId + count).map { PreKeyRecord(it, ECKeyPair.generate()) }
+
+        fun generateSignedPreKey(identityKeyPair: IdentityKeyPair, id: Int): SignedPreKeyRecord {
+            val keyPair = ECKeyPair.generate()
+            val signature = identityKeyPair.privateKey.calculateSignature(keyPair.publicKey.serialize())
+            return SignedPreKeyRecord(id, System.currentTimeMillis(), keyPair, signature)
+        }
     }
 }

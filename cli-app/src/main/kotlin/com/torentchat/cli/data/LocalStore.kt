@@ -47,5 +47,6 @@ class LocalStore(private val dir: Path) {
         msgs.add(Message(UUID.randomUUID().toString(), cid, sender, content, System.currentTimeMillis(), "DELIVERED", false))
         convs.find { it.id == cid }?.let { it.lastPreview = content; it.lastTs = System.currentTimeMillis() }; save()
     }
+    fun updateStatus(mid: String, s: String) { val i = msgs.indexOfFirst { it.id == mid }; if (i >= 0) { msgs[i].status = s; save() } }
     fun addContact(pid: String, name: String?, ik: String?) { if (contacts.none { it.peerId == pid }) { contacts.add(Contact(pid, name, ik)); save() } }
 }

@@ -25,24 +25,22 @@ import java.util.*
 @Composable
 fun AppNavigation(chat: ChatService) {
     var screen by remember { mutableStateOf("onboarding") }
+    var selectedConvId by remember { mutableStateOf("") }
     val identity by chat.identityState.collectAsState()
     LaunchedEffect(identity) { if (identity != null && screen == "onboarding") screen = "conversations" }
     when (screen) {
         "onboarding" -> OnboardingScreen(chat) { screen = "conversations" }
-        "conversations" -> ConversationsScreen(chat, { screen = "chat" }, { screen = "scan" }, { screen = "profile" })
-        "chat" -> ChatScreen(chat) { screen = "conversations" }
+        "conversations" -> ConversationsScreen(chat, onSelect = { selectedConvId = it; screen = "chat" }, onScan = { screen = "scan" }, onProfile = { screen = "profile" })
+        "chat" -> ChatScreen(chat, selectedConvId) { screen = "conversations" }
         "scan" -> ScanScreen(chat) { screen = "conversations" }
         "profile" -> ProfileScreen(chat) { screen = "conversations" }
     }
 }
 
-private var selectedConvId = ""
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OnboardingScreen(chat: ChatService, onDone: () -> Unit) {
     var gen by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize().padding(48.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             Icon(Icons.Default.VerifiedUser, null, Modifier.size(80.dp), tint = MaterialTheme.colorScheme.primary)
@@ -63,7 +61,7 @@ fun OnboardingScreen(chat: ChatService, onDone: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ConversationsScreen(chat: ChatService, onChat: () -> Unit, onScan: () -> Unit, onProfile: () -> Unit) {
+fun ConversationsScreen(chat: ChatService, onSelect: (String) -> Unit, onScan: () -> Unit, onProfile: () -> Unit) {
     val convs by chat.conversations.collectAsState()
     Scaffold(
         topBar = { TopAppBar(title = { Text("TorentChat") }, actions = {
@@ -78,7 +76,7 @@ fun ConversationsScreen(chat: ChatService, onChat: () -> Unit, onScan: () -> Uni
             }
         } else {
             LazyColumn(Modifier.padding(pad)) {
-                items(convs) { c -> ConvRow(c) { selectedConvId = c.id; onChat() }; HorizontalDivider() }
+                items(convs) { c -> ConvRow(c) { onSelect(c.id) }; HorizontalDivider() }
             }
         }
     }
@@ -102,7 +100,7 @@ private fun ConvRow(c: Conversation, onClick: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(chat: ChatService, onBack: () -> Unit) {
+fun ChatScreen(chat: ChatService, selectedConvId: String, onBack: () -> Unit) {
     val cid = selectedConvId
     val msgs by chat.messagesFor(cid).collectAsState()
     val convs by chat.conversations.collectAsState()

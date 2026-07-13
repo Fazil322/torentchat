@@ -7,7 +7,9 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.Serializable
@@ -25,6 +27,23 @@ class SignalingClient(private val relayUrl: String) {
     private val client = HttpClient(OkHttp) { install(ContentNegotiation) { json(this@SignalingClient.json) } }
 
     private fun q(s: String) = "\"${s.replace("\\","\\\\").replace("\"","\\\"")}\""
+
+    // ── Pre-key bundle (X3DH) ─────────────────────────────────────────────────
+
+    /** Upload our pre-key bundle so other peers can initiate sessions with us. */
+    suspend fun registerPeer(peerId: String, bundleJson: String) {
+        client.post("$relayUrl/v1/register") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"peerId":"$peerId","preKeyBundle":$bundleJson}""")
+        }
+    }
+
+    /** Fetch a remote peer's pre-key bundle to initiate an X3DH session. */
+    suspend fun fetchPreKeyBundle(peerId: String): String? {
+        val response: HttpResponse = client.get("$relayUrl/v1/prekeys/$peerId")
+        return if (response.status == HttpStatusCode.OK) response.body()
+        else null
+    }
 
     suspend fun sendOffer(from: String, to: String, sdp: String) =
         client.post("$relayUrl/v1/signaling/offer") { contentType(ContentType.Application.Json); setBody("""{"from":"$from","to":"$to","sdp":${q(sdp)}}""") }
