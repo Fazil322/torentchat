@@ -1,0 +1,16 @@
+[package]
+name = "torentchat-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "torentchat-desktop"
+path = "src/main.rs"
+
+[dependencies]
+torentchat-core.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+eframe = "0.28"
+egui = "0.28"

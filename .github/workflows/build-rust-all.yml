@@ -1,0 +1,77 @@
+name: Build Rust (All Platforms)
+
+on:
+  push:
+    branches: [main, master]
+    paths: ['rust-workspace/**', '.github/workflows/build-rust-all.yml']
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: rust-workspace
+
+jobs:
+  build-cli:
+    name: CLI ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: torentchat-cli-linux
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: torentchat-cli-windows.exe
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: torentchat-cli-macos
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: ${{ matrix.target }} }
+      - run: cargo build --release --bin torentchat --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: rust-workspace/target/${{ matrix.target }}/release/torentchat*
+
+  build-desktop:
+    name: Desktop ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: torentchat-desktop-linux
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: torentchat-desktop-windows.exe
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: torentchat-desktop-macos
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: ${{ matrix.target }} }
+      - name: Install Linux deps
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
+      - run: cargo build --release --bin torentchat-desktop --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: rust-workspace/target/${{ matrix.target }}/release/torentchat-desktop*
+
+  build-web:
+    name: Web Server
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release --bin torentchat-web
+      - uses: actions/upload-artifact@v4
+        with:
+          name: torentchat-web-server
+          path: rust-workspace/target/release/torentchat-web
