@@ -44,9 +44,17 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let method = req.method();
     let url = req.url()?;
     let path = url.path().to_string();
-    let query: std::collections::HashMap<String, String> = url
-        .search_pairs()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
+    // Parse query string manually (worker::Url doesn't have search_pairs in 0.8)
+    let query_str = url.search().unwrap_or("");
+    let query: std::collections::HashMap<String, String> = query_str
+        .strip_prefix('?').unwrap_or(query_str)
+        .split('&')
+        .filter_map(|kv| {
+            let mut parts = kv.splitn(2, '=');
+            let k = parts.next()?.to_string();
+            let v = parts.next().unwrap_or("").to_string();
+            Some((k, v))
+        })
         .collect();
 
     // ── Health ─────────────────────────────────────────────────────────
@@ -59,7 +67,7 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         let body: StorePendingReq = req.json().await?;
         let kv = env.kv("PENDING")?;
         let list_key = format!("pending-list:{}", body.to);
-        let queue: Vec<String> = kv.get(&list_key).json().await.unwrap_or_default();
+        let queue: Vec<String> = kv.get(&list_key).json().await.ok().flatten().unwrap_or_default();
         let mut queue = queue;
         let entry_key = format!("pending:{}:{}:{}", body.to, now_ts(), rand_id());
         let entry = PendingEnvelope { from: body.from, envelope: body.envelope, ts: now_ts() };
@@ -74,7 +82,7 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         let peer_id = path.strip_prefix("/v1/pending/").unwrap_or("");
         let kv = env.kv("PENDING")?;
         let list_key = format!("pending-list:{}", peer_id);
-        let queue: Vec<String> = kv.get(&list_key).json().await.unwrap_or_default();
+        let queue: Vec<String> = kv.get(&list_key).json().await.ok().flatten().unwrap_or_default();
         let mut envelopes = Vec::new();
         for key in &queue {
             if let Ok(Some(raw)) = kv.get(key).text().await {
