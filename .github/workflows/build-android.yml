@@ -50,23 +50,33 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
 
       - name: 🔑 Generate Gradle wrapper
+        run: gradle wrapper --gradle-version 8.8 --distribution-type bin
+
+      - name: 🔐 Generate release keystore
         run: |
-          # The repo ships gradle-wrapper.properties but not the wrapper scripts
-          # (they're binary). Generate them here so the build works in CI.
-          gradle wrapper --gradle-version 8.8 --distribution-type bin
+          keytool -genkeypair -v \
+            -keystore android-app/release.keystore \
+            -alias torentchat \
+            -keyalg RSA -keysize 2048 \
+            -validity 10000 \
+            -storepass torentchat2026 \
+            -keypass torentchat2026 \
+            -dname "CN=TorentChat, OU=Dev, O=TorentChat, L=Jakarta, ST=Jakarta, C=ID"
 
-      - name: 🔨 Build debug APK
+      - name: 🔨 Build RELEASE APK (signed + ProGuard)
         env:
-          # Injected into BuildConfig.SIGNALING_RELAY_URL at build time.
-          # If secret is empty, the placeholder from build.gradle.kts is used.
           SIGNALING_RELAY_URL: ${{ secrets.SIGNALING_RELAY_URL }}
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+          KEYSTORE_PATH: ${{ github.workspace }}/android-app/release.keystore
+          KEYSTORE_PASSWORD: torentchat2026
+          KEY_ALIAS: torentchat
+          KEY_PASSWORD: torentchat2026
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
 
-      - name: 📤 Upload APK artifact
+      - name: 📤 Upload release APK
         uses: actions/upload-artifact@v4
         with:
-          name: torentchat-debug-apk
-          path: android-app/app/build/outputs/apk/debug/*.apk
+          name: torentchat-release-apk
+          path: android-app/app/build/outputs/apk/release/*.apk
           retention-days: 30
           if-no-files-found: error
 

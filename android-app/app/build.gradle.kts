@@ -30,6 +30,15 @@ android {
         )
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file(System.getenv("KEYSTORE_PATH") ?: "release.keystore")
+            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "torentchat2026"
+            keyAlias = System.getenv("KEY_ALIAS") ?: "torentchat"
+            keyPassword = System.getenv("KEY_PASSWORD") ?: "torentchat2026"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -38,6 +47,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("release")
         }
         debug {
             isMinifyEnabled = false

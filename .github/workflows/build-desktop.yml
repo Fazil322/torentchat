@@ -42,13 +42,13 @@ jobs:
       - name: 🔑 Generate Gradle wrapper
         run: gradle wrapper --gradle-version 8.8 --distribution-type bin
 
-      - name: 🔨 Build & package desktop app (debug, no ProGuard)
-        run: ./gradlew packageDistributionForCurrentOS --no-daemon --stacktrace
+      - name: 🔨 Build & package RELEASE desktop app (.msi + .exe)
+        run: ./gradlew packageReleaseMsi packageReleaseExe --no-daemon --stacktrace
 
-      - name: 📤 Upload all installers
+      - name: 📤 Upload release installers
         uses: actions/upload-artifact@v4
         with:
-          name: torentchat-desktop-installers
+          name: torentchat-desktop-release
           path: |
             desktop-app/build/compose/binaries/**/*.msi
             desktop-app/build/compose/binaries/**/*.exe

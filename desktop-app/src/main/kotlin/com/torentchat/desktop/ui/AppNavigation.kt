@@ -207,26 +207,67 @@ fun ScanScreen(chatService: ChatService, onBack: () -> Unit) {
 fun ProfileScreen(chatService: ChatService, onBack: () -> Unit) {
     val identity by chatService.identityState.collectAsState()
     var name by remember(identity) { mutableStateOf(identity?.displayName ?: "") }
+    val peerId = identity?.peerId ?: "XXXX-XXXX"
+
     Scaffold(topBar = { TopAppBar(title = { Text("Profil") },
         navigationIcon = { IconButton(onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.size(160.dp)) {
-                Box(contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.QrCode, null, Modifier.size(80.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("QR Code Anda", style = MaterialTheme.typography.labelSmall)
+            // QR Code generated from peer ID
+            val qrMatrix = remember(peerId) { generateQrMatrix("torentchat://invite?peerId=$peerId") }
+            qrMatrix?.let { matrix ->
+                Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface, modifier = Modifier.size(200.dp)) {
+                    Box(contentAlignment = Alignment.Center) {
+                        androidx.compose.foundation.Canvas(modifier = Modifier.size(180.dp)) {
+                            val size = matrix.size
+                            val cellSize = this.size.minDimension / size
+                            for (y in 0 until size) {
+                                for (x in 0 until size) {
+                                    if (matrix[y * size + x]) {
+                                        drawRect(
+                                            color = androidx.compose.ui.graphics.Color.Black,
+                                            topLeft = androidx.compose.ui.geometry.Offset(x * cellSize, y * cellSize),
+                                            size = androidx.compose.ui.geometry.Size(cellSize, cellSize),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } ?: run {
+                Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.size(200.dp)) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.QrCode, null, Modifier.size(80.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("QR Code Anda", style = MaterialTheme.typography.labelSmall)
+                        }
                     }
                 }
             }
-            Text(identity?.peerId ?: "XXXX-XXXX", style = MaterialTheme.typography.headlineSmall, fontFamily = FontFamily.Monospace)
+            Text("Peer ID Anda:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(peerId, style = MaterialTheme.typography.headlineSmall, fontFamily = FontFamily.Monospace)
             OutlinedTextField(name, { name = it }, label = { Text("Nama tampilan") }, singleLine = true)
-            Button({ }) { Text("Simpan") }
+            Button({ identity?.let { /* TODO: persist via IdentityManager */ } }) { Text("Simpan") }
             HorizontalDivider()
-            Text("TorentChat v0.1.0", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("TorentChat Desktop v0.1.0", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("Pesan terenkripsi end-to-end dengan Signal Protocol", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 private fun fmtTime(ts: Long): String = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(ts))
+
+/** Generate a QR code as a boolean matrix (pixel on/off) using ZXing. */
+private fun generateQrMatrix(content: String): BooleanArray? {
+    return try {
+        val writer = com.google.zxing.qrcode.QRCodeWriter()
+        val bitMatrix = writer.encode(content, com.google.zxing.BarcodeFormat.QR_CODE, 256, 256)
+        val size = bitMatrix.width
+        BooleanArray(size * size) { idx ->
+            val x = idx % size
+            val y = idx / size
+            bitMatrix.get(x, y)
+        }
+    } catch (_: Exception) { null }
+}

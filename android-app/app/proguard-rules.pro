@@ -1,20 +1,13 @@
 # ─── TorentChat ProGuard Rules ────────────────────────────────────────────────
 
 # --- libsignal (Signal Protocol) ---
-# Keeps native crypto code intact; stripping may break Curve25519 operations.
--keep class org.whispersystems.libsignal.** { *; }
--keep class org.whispersystems.curve25519.** { *; }
-
-# --- SQLCipher ---
--keep class net.zetetic.database.** { *; }
-
-# --- Room ---
--keep class * extends androidx.room.RoomDatabase { *; }
--dontwarn androidx.room.paging.**
-
-# --- WebRTC (Stream build) ---
--keep class org.webrtc.** { *; }
--keep class io.getstream.webrtc.** { *; }
+-keep class org.signal.libsignal.** { *; }
+-keep class org.signal.libsignal.internal.** { *; }
+-keepclassmembers class org.signal.libsignal.** { *; }
+# Keep native method names
+-keepclasseswithmembernames class * {
+    native <methods>;
+}
 
 # --- Kotlinx Serialization ---
 -keepattributes *Annotation*, InnerClasses
@@ -25,10 +18,27 @@
 -keepclasseswithmembers class kotlinx.serialization.json.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
-
-# --- Hilt / Dagger ---
--keep class dagger.hilt.** { *; }
--keep class javax.inject.** { *; }
-
-# --- Keep model classes used in serialization ---
 -keep @kotlinx.serialization.Serializable class * { *; }
+
+# --- Ktor ---
+-keep class io.ktor.** { *; }
+-dontwarn io.ktor.**
+
+# --- WebRTC (Stream) ---
+-keep class org.webrtc.** { *; }
+-keep class io.getstream.webrtc.** { *; }
+
+# --- Coroutines ---
+-keep class kotlinx.coroutines.** { *; }
+
+# --- Keep model classes ---
+-keep class com.torentchat.domain.model.** { *; }
+-keep class com.torentchat.crypto.** { *; }
+-keep class com.torentchat.data.local.entity.** { *; }
+
+# --- Compose ---
+-dontwarn androidx.compose.**
+
+# --- Room ---
+-keep class * extends androidx.room.RoomDatabase { *; }
+-dontwarn androidx.room.paging.**
