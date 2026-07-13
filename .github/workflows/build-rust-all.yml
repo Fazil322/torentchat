@@ -91,28 +91,70 @@ jobs:
       - name: Build APK
         working-directory: rust-workspace/android
         run: cargo apk build --release
-        continue-on-error: true
       - uses: actions/upload-artifact@v4
         with:
           name: torentchat-android-apk
-          path: rust-workspace/android/target/release/apk/*.apk
-          if-no-files-found: warn
+          path: rust-workspace/target/release/apk/*.apk
+          if-no-files-found: error
+
+  release:
+    name: Publish to GitHub Releases
+    runs-on: ubuntu-latest
+    needs: [build-cli, build-desktop, build-web, build-android]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          find artifacts -type f -exec cp {} release/ \;
+          ls -la release/
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.1.0-rust
+          name: TorentChat v0.1.0 (Rust Native)
+          body: |
+            ## 🔐 TorentChat — 100% Rust Native
+
+            All platforms rewritten in Rust. No JVM, no Node.js, no Kotlin.
+
+            ### Downloads
+            - **CLI**: torentchat-cli-linux, torentchat-cli-windows.exe, torentchat-cli-macos
+            - **Desktop**: torentchat-desktop-linux, torentchat-desktop-windows.exe
+            - **Web**: torentchat-web-server
+            - **Android**: torentchat-android-apk
+
+            ### Crypto
+            X25519 + AES-256-GCM (same across all platforms)
+
+            ### Backend
+            Cloudflare Worker (Rust → WASM)
+          files: release/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   deploy-worker:
-    name: Deploy Rust Worker
+    name: Deploy Worker to Cloudflare
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      - name: Install wasm-bindgen-cli (latest)
-        run: cargo install -q wasm-bindgen-cli
-      - name: Install worker-build (latest)
+      - name: Install worker-build
         run: cargo install -q worker-build
-      - name: Build Worker (WASM)
+      - name: Clear cache and build with newer wasm-bindgen
         working-directory: rust-workspace/worker
-        run: worker-build --release
+        run: |
+          rm -rf ~/.cache/worker-build
+          export WASM_BINDGEN_VERSION=0.2.95
+          worker-build --release
       - name: Deploy to Cloudflare
         working-directory: rust-workspace/worker
         run: npx wrangler deploy
