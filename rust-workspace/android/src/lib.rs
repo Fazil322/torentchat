@@ -2,8 +2,8 @@
 // Called from a thin Kotlin/Java shim that loads this .so and calls JNI methods.
 // All logic (crypto, signaling, chat) is in Rust — no JVM business logic.
 
-use jni::objects::{JClass, JString, JObject, JValue};
-use jni::env::JNIEnv;
+use jni::objects::{JClass, JString};
+use jni::JNIEnv;
 use jni::sys::{jstring, jboolean};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
