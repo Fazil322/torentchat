@@ -1,0 +1,67 @@
+# ─── TorentChat Linux: Build .deb + .rpm + .AppImage ──────────────────────────
+name: Build Linux
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'linux-app/**'
+      - '.github/workflows/build-linux.yml'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'linux-app/**'
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: linux-app
+
+jobs:
+  build:
+    name: Build .deb + .rpm + .AppImage
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: ☕ Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: 📦 Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: 🔑 Generate Gradle wrapper
+        run: gradle wrapper --gradle-version 8.8 --distribution-type bin
+
+      - name: 🔨 Build & package Linux distributions
+        run: ./gradlew packageDistributionForCurrentOS --no-daemon --stacktrace
+
+      - name: 📤 Upload .deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: torentchat-linux-deb
+          path: linux-app/build/compose/binaries/**/*.deb
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: 📤 Upload .rpm
+        uses: actions/upload-artifact@v4
+        with:
+          name: torentchat-linux-rpm
+          path: linux-app/build/compose/binaries/**/*.rpm
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: 📤 Upload .AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: torentchat-linux-appimage
+          path: linux-app/build/compose/binaries/**/*.AppImage
+          retention-days: 30
+          if-no-files-found: warn
