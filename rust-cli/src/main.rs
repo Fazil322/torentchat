@@ -6,7 +6,8 @@ use anyhow::{anyhow, Result};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 use aes_gcm::aead::{Aead, KeyInit};
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
-use p256::{PublicKey, SecretKey, ecdh::EphemeralSecret, EncodedPoint};
+use p256::{PublicKey, SecretKey, EncodedPoint};
+use p256::ecdh::diffie_hellman;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -33,8 +34,7 @@ fn pub_key_bytes(pk: &PublicKey) -> Vec<u8> {
 }
 
 fn derive_key(my_secret: &SecretKey, their_public: &PublicKey) -> [u8; 32] {
-    let eph_secret = EphemeralSecret::from(my_secret.clone());
-    let shared = eph_secret.diffie_hellman(their_public);
+    let shared = diffie_hellman(my_secret.to_nonzero_scalar(), their_public);
     let raw = shared.raw_secret_bytes();
     let mut hasher = Sha256::new();
     hasher.update(raw);
@@ -115,7 +115,6 @@ fn save_identity(id: &Identity) -> Result<()> {
 }
 
 fn create_identity() -> Result<Identity> {
-    use p256::pkcs8::EncodePrivateKey;
     let (secret, public) = gen_keypair();
     let pub_bytes = pub_key_bytes(&public);
     let pid = peer_id_from_pub(&pub_bytes);
