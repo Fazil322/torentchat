@@ -14,12 +14,16 @@ async function post(path: string, body: Record<string, unknown>) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  return res.json();
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 
 async function get(path: string) {
   const res = await fetch(`${RELAY_URL}${path}`);
-  return res.json();
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 
 export const signaling = {

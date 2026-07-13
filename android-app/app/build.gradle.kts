@@ -113,9 +113,8 @@ dependencies {
     implementation(libs.stream.webrtc.android)
 
     // ── Signal Protocol (E2EE) ─────────────────────────────────────────────
-    // libsignal-android: native .so files; libsignal-client: protocol classes
+    // libsignal-android includes native .so + protocol classes via libsignal-client transitive dep
     implementation(libs.libsignal)
-    implementation(libs.libsignal.client)
 
     // ── SQLCipher + Room (encrypted local storage) ─────────────────────────
     implementation(libs.sqlcipher)

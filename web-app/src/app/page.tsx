@@ -20,7 +20,11 @@ export default function Home() {
   const [editName, setEditName] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Load identity on mount
+  // Load identity on mount — use refs to avoid stale closures
+  const activeConvRef = useRef<Conversation | null>(null);
+  const chatServiceRef = useRef<ChatService | null>(null);
+  activeConvRef.current = activeConv;
+
   useEffect(() => {
     const id = loadIdentity();
     if (id) {
@@ -28,16 +32,17 @@ export default function Home() {
       setScreen('conversations');
       const svc = new ChatService(id);
       svc.onMessage = (msg) => {
-        if (activeConv && msg.conversationId === activeConv.id) {
+        if (activeConvRef.current && msg.conversationId === activeConvRef.current.id) {
           setMessages(prev => [...prev, msg]);
         }
         setConversations(svc.getConversations());
       };
       svc.start();
+      chatServiceRef.current = svc;
       setChatService(svc);
       setConversations(svc.getConversations());
     }
-    return () => { chatService?.stop(); };
+    return () => { chatServiceRef.current?.stop(); };
   }, []);
 
   const handleGenerate = async () => {
@@ -81,9 +86,14 @@ export default function Home() {
 
   const handleConnect = () => {
     if (!manualPeerId.trim() || !chatService) return;
-    // For manual connection, we use peerId as temporary public key
-    // (in production, this would fetch the peer's pre-key bundle)
-    const conv = chatService.getOrCreateConversation(manualPeerId, manualPeerId);
+    // Validate peer ID format (XXXX-XXXX)
+    if (!/^[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(manualPeerId.trim())) {
+      alert('Format ID tidak valid. Contoh: K7M3-PQ9X');
+      return;
+    }
+    // For manual connection, we don't have the peer's public key yet.
+    // Store empty string as publicKey — will be fetched when X3DH is implemented.
+    const conv = chatService.getOrCreateConversation(manualPeerId.trim(), '');
     setConversations(chatService.getConversations());
     setManualPeerId('');
     setScreen('conversations');

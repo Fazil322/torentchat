@@ -38,7 +38,14 @@ function loadStore(): Store {
 }
 
 function saveStore(store: Store) {
-  localStorage.setItem(STORE_KEY, JSON.stringify(store));
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(store));
+  } catch (e) {
+    // Quota exceeded — trim old messages (keep last 100 per conversation)
+    const allMsgs = store.messages.sort((a, b) => b.timestamp - a.timestamp);
+    store.messages = allMsgs.slice(0, 100);
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch {}
+  }
 }
 
 export class ChatService {
@@ -119,8 +126,10 @@ export class ChatService {
     saveStore(this.store);
 
     try {
-      const envelope = await encrypt(this.identity, publicKey, content);
-      await signaling.storePending(this.identity.peerId, peerId, JSON.stringify(envelope));
+      if (publicKey) {
+        const envelope = await encrypt(this.identity, publicKey, content);
+        await signaling.storePending(this.identity.peerId, peerId, JSON.stringify(envelope));
+      }
     } catch {}
   }
 
