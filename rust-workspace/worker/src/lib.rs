@@ -44,11 +44,12 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let method = req.method();
     let url = req.url()?;
     let path = url.path().to_string();
-    // Parse query string manually (worker::Url doesn't have search_pairs in 0.8)
-    let query_str = url.search().unwrap_or("");
+    // Parse query string manually from full URL
+    let full_url = url.as_str().to_string();
+    let query_str = full_url.split('?').nth(1).unwrap_or("");
     let query: std::collections::HashMap<String, String> = query_str
-        .strip_prefix('?').unwrap_or(query_str)
         .split('&')
+        .filter(|s| !s.is_empty())
         .filter_map(|kv| {
             let mut parts = kv.splitn(2, '=');
             let k = parts.next()?.to_string();
