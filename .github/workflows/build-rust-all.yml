@@ -75,3 +75,22 @@ jobs:
         with:
           name: torentchat-web-server
           path: rust-workspace/target/release/torentchat-web
+
+  deploy-worker:
+    name: Deploy Rust Worker to Cloudflare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: wasm32-unknown-unknown }
+      - name: Install worker-build
+        run: cargo install -q worker-build
+      - name: Build Worker
+        working-directory: rust-workspace/worker
+        run: worker-build --release
+      - name: Deploy
+        working-directory: rust-workspace/worker
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
