@@ -158,7 +158,7 @@ jobs:
         working-directory: rust-workspace
         run: |
           mkdir -p worker/build/worker
-          wasm-bindgen --no-typescript --target module --out-name index --out-dir worker/build/worker target/wasm32-unknown-unknown/release/torentchat_worker.wasm
+          wasm-bindgen --no-typescript --target web --out-name index --out-dir worker/build/worker target/wasm32-unknown-unknown/release/torentchat_worker.wasm
       - name: Create shim.mjs
         working-directory: rust-workspace/worker
         run: |

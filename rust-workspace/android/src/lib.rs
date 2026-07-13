@@ -1,5 +1,4 @@
 // TorentChat Android — Rust native via JNI
-// Called from a thin Kotlin/Java shim that loads this .so and calls JNI methods.
 // All logic (crypto, signaling, chat) is in Rust — no JVM business logic.
 
 use jni::objects::{JClass, JString};
@@ -33,37 +32,33 @@ fn chat() -> &'static Arc<Chat> {
     })}
 }
 
-// ─── JNI Methods (called from Kotlin) ─────────────────────────────────────────
-
 #[no_mangle]
-pub extern "system" fn Java_com_torentchat_TorentChatNative_getPeerId(env: JNIEnv, _cls: JClass) -> jstring {
+pub extern "system" fn Java_com_torentchat_TorentChatNative_getPeerId(mut env: JNIEnv, _cls: JClass) -> jstring {
     let pid = chat().identity.peer_id.clone();
     env.new_string(pid).unwrap().into_raw()
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_torentchat_TorentChatNative_getPublicKey(env: JNIEnv, _cls: JClass) -> jstring {
+pub extern "system" fn Java_com_torentchat_TorentChatNative_getPublicKey(mut env: JNIEnv, _cls: JClass) -> jstring {
     let pk = chat().identity.public_key_b64.clone();
     env.new_string(pk).unwrap().into_raw()
 }
 
 #[no_mangle]
 pub extern "system" fn Java_com_torentchat_TorentChatNative_sendMessage(
-    env: JNIEnv, _cls: JClass, peer_id: JString, pub_key: JString, content: JString,
+    mut env: JNIEnv, _cls: JClass, peer_id: JString, pub_key: JString, content: JString,
 ) -> jboolean {
     let peer: String = env.get_string(&peer_id).unwrap().into();
     let key: String = env.get_string(&pub_key).unwrap().into();
     let msg: String = env.get_string(&content).unwrap().into();
     let chat = chat().clone();
-    rt().spawn(async move {
-        let _ = chat.send(&peer, &key, &msg).await;
-    });
-    1 // true = sent
+    rt().spawn(async move { let _ = chat.send(&peer, &key, &msg).await; });
+    1
 }
 
 #[no_mangle]
 pub extern "system" fn Java_com_torentchat_TorentChatNative_connect(
-    env: JNIEnv, _cls: JClass, peer_id: JString, pub_key: JString,
+    mut env: JNIEnv, _cls: JClass, peer_id: JString, pub_key: JString,
 ) {
     let peer: String = env.get_string(&peer_id).unwrap().into();
     let key: String = env.get_string(&pub_key).unwrap().into();
@@ -71,7 +66,7 @@ pub extern "system" fn Java_com_torentchat_TorentChatNative_connect(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_torentchat_TorentChatNative_pollMessages(env: JNIEnv, _cls: JClass) -> jstring {
+pub extern "system" fn Java_com_torentchat_TorentChatNative_pollMessages(mut env: JNIEnv, _cls: JClass) -> jstring {
     let chat = chat().clone();
     let msgs = rt().block_on(async { chat.drain().await.unwrap_or_default() });
     let json = serde_json::to_string(&msgs).unwrap_or_default();
@@ -79,7 +74,7 @@ pub extern "system" fn Java_com_torentchat_TorentChatNative_pollMessages(env: JN
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_torentchat_TorentChatNative_getConversations(env: JNIEnv, _cls: JClass) -> jstring {
+pub extern "system" fn Java_com_torentchat_TorentChatNative_getConversations(mut env: JNIEnv, _cls: JClass) -> jstring {
     let convs = chat().store.blocking_read().conversations.clone();
     let json = serde_json::to_string(&convs).unwrap_or_default();
     env.new_string(json).unwrap().into_raw()
@@ -87,14 +82,12 @@ pub extern "system" fn Java_com_torentchat_TorentChatNative_getConversations(env
 
 #[no_mangle]
 pub extern "system" fn Java_com_torentchat_TorentChatNative_getMessages(
-    env: JNIEnv, _cls: JClass, peer_id: JString,
+    mut env: JNIEnv, _cls: JClass, peer_id: JString,
 ) -> jstring {
     let peer: String = env.get_string(&peer_id).unwrap().into();
     let cid = torentchat_core::data::conv_id(&chat().identity.peer_id, &peer);
-    let msgs = chat().store.blocking_read().messages.iter()
-        .filter(|m| m.cid == cid)
-        .cloned()
-        .collect::<Vec<_>>();
+    let msgs: Vec<_> = chat().store.blocking_read().messages.iter()
+        .filter(|m| m.cid == cid).cloned().collect();
     let json = serde_json::to_string(&msgs).unwrap_or_default();
     env.new_string(json).unwrap().into_raw()
 }
