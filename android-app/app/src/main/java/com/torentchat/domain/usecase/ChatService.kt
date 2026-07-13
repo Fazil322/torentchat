@@ -2,37 +2,81 @@ package com.torentchat.domain.usecase
 
 import com.torentchat.crypto.Envelope
 import com.torentchat.crypto.SignalSessionManager
+import com.torentchat.crypto.TorentKeyStore
 import com.torentchat.data.repository.ConversationRepository
 import com.torentchat.data.repository.MessageRepository
 import com.torentchat.domain.model.MessageStatus
+import com.torentchat.identity.IdentityManager
+import com.torentchat.signaling.SignalingClient
 import com.torentchat.webrtc.P2pConnectionManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Central chat orchestrator: ties together crypto, P2P transport, and local DB.
- *
- * - [sendMessage]: stores locally, encrypts if session exists, sends via P2P/KV
- * - [startListening]: collects incoming envelopes → decrypts → stores in DB
- */
 @Singleton
 class ChatService @Inject constructor(
     private val crypto: SignalSessionManager,
     private val p2pManager: P2pConnectionManager,
     private val messageRepository: MessageRepository,
     private val conversationRepository: ConversationRepository,
+    private val identityManager: IdentityManager,
+    private val signalingClient: SignalingClient,
 ) {
     private var listenJob: Job? = null
     private var localPeerId: String = ""
+    private val json = Json { ignoreUnknownKeys = true }
 
     fun initialize(peerId: String, scope: CoroutineScope) {
         localPeerId = peerId
         p2pManager.initialize(peerId, scope)
         startListening(scope)
+        // Register pre-key bundle on the relay
+        scope.launch { registerPreKeys() }
+    }
+
+    /**
+     * Generate + upload pre-key bundle so other peers can initiate X3DH with us.
+     */
+    private suspend fun registerPreKeys() {
+        try {
+            val identity = identityManager.currentIdentity ?: return
+            val keyStore = identity.keyStore
+
+            // Generate signed pre-key
+            val signedPreKey = TorentKeyStore.generateSignedPreKey(
+                keyStore.getIdentityKeyPair(), 1
+            )
+            keyStore.storeSignedPreKey(1, signedPreKey)
+
+            // Generate one-time pre-keys
+            val oneTimePreKeys = TorentKeyStore.generatePreKeys(1, 10)
+            oneTimePreKeys.forEach { keyStore.storePreKey(it.id, it) }
+
+            // Build bundle JSON (matches Worker's expected format)
+            val bundle = buildString {
+                append("{")
+                append("\"identityKey\":\"${java.util.Base64.getEncoder().encodeToString(keyStore.getIdentityKeyPair().publicKey.serialize())}\"")
+                append(",\"registrationId\":${keyStore.registrationId}")
+                append(",\"signedPreKeyId\":${signedPreKey.id}")
+                append(",\"signedPreKey\":\"${java.util.Base64.getEncoder().encodeToString(signedPreKey.keyPair.publicKey.serialize())}\"")
+                append(",\"signature\":\"${java.util.Base64.getEncoder().encodeToString(signedPreKey.signature)}\"")
+                append(",\"oneTimePreKeys\":[")
+                append(oneTimePreKeys.joinToString(",") { pk ->
+                    "{\"id\":${pk.id},\"publicKey\":\"${java.util.Base64.getEncoder().encodeToString(pk.keyPair.publicKey.serialize())}\"}"
+                })
+                append("]}")
+            }
+
+            signalingClient.registerPeer(localPeerId, bundle)
+        } catch (_: Exception) {}
     }
 
     private fun startListening(scope: CoroutineScope) {
@@ -42,32 +86,16 @@ class ChatService @Inject constructor(
                 try {
                     val plaintext = crypto.decrypt(envelope)
                     val content = String(plaintext, Charsets.UTF_8)
-
-                    // Find or create conversation for this sender
                     val conversationId = "direct-${listOf(localPeerId, envelope.senderId).sorted().joinToString("-")}"
-
-                    // Ensure a conversation exists so the message is visible
-                    val existingConv = conversationRepository.observeById(conversationId)
-                    // Create conversation if it doesn't exist (fire and forget)
-                    conversationRepository.createDirectConversation(
-                        localPeerId = localPeerId,
-                        remotePeerId = envelope.senderId,
-                        title = envelope.senderId,
-                    )
-
+                    conversationRepository.createDirectConversation(localPeerId, envelope.senderId, envelope.senderId)
                     messageRepository.insertIncoming(conversationId, envelope.senderId, content)
-                } catch (e: Exception) {
-                    // Decryption failure — skip (possible key mismatch or no session)
-                }
+                } catch (_: Exception) {}
             }
         }
     }
 
     /**
-     * Send a text message to [recipientId].
-     * 1. Store locally as SENDING
-     * 2. If session exists: encrypt + send via P2P/KV
-     * 3. If no session: keep as SENDING (will be sent when session is established)
+     * Send message: store locally, establish X3DH session if needed, encrypt, send.
      */
     suspend fun sendMessage(
         recipientId: String,
@@ -75,26 +103,54 @@ class ChatService @Inject constructor(
         conversationId: String,
         scope: CoroutineScope,
     ) {
-        // 1. Store locally
         val messageId = messageRepository.insertOutgoing(conversationId, localPeerId, content)
 
         try {
+            // If no session, try to establish via X3DH
+            if (!crypto.hasSessionWith(recipientId)) {
+                establishSession(recipientId)
+            }
+
             if (crypto.hasSessionWith(recipientId)) {
-                // 2. Encrypt + send
                 val envelope = crypto.encrypt(recipientId, content.toByteArray(Charsets.UTF_8))
                 p2pManager.sendEnvelope(recipientId, envelope, scope)
                 messageRepository.updateStatus(messageId, MessageStatus.SENT)
             } else {
-                // No session yet — message stays as SENDING.
-                // In a future version, this triggers session establishment (X3DH)
-                // via the signaling relay, then re-tries encryption.
-                // For now, mark as SENT so the UI doesn't show perpetual "sending".
-                messageRepository.updateStatus(messageId, MessageStatus.SENT)
+                // Session establishment failed — store as PENDING (not SENT)
+                messageRepository.updateStatus(messageId, MessageStatus.FAILED)
             }
-        } catch (e: Exception) {
-            // Encryption or send failed — mark as FAILED
+        } catch (_: Exception) {
             messageRepository.updateStatus(messageId, MessageStatus.FAILED)
         }
+    }
+
+    /**
+     * Fetch peer's pre-key bundle from relay and run X3DH session establishment.
+     */
+    private suspend fun establishSession(remotePeerId: String) {
+        try {
+            val bundleRaw = signalingClient.fetchPreKeyBundle(remotePeerId) ?: return
+            val bundle = json.parseToJsonElement(bundleRaw).jsonObject
+
+            val registrationId = bundle["registrationId"]?.jsonPrimitive?.intOrNull ?: return
+            val identityKeyB64 = bundle["identityKey"]?.jsonPrimitive?.contentOrNull ?: return
+            val signedPreKeyId = bundle["signedPreKeyId"]?.jsonPrimitive?.intOrNull ?: return
+            val signedPreKeyB64 = bundle["signedPreKey"]?.jsonPrimitive?.contentOrNull ?: return
+            val signatureB64 = bundle["signature"]?.jsonPrimitive?.contentOrNull ?: return
+            val preKeyId = bundle["oneTimePreKeyId"]?.jsonPrimitive?.intOrNull
+            val preKeyB64 = bundle["oneTimePreKey"]?.jsonPrimitive?.contentOrNull
+
+            crypto.initiateSession(
+                remotePeerId = remotePeerId,
+                registrationId = registrationId,
+                preKeyId = preKeyId,
+                preKeyPublic = preKeyB64?.let { java.util.Base64.getDecoder().decode(it) },
+                signedPreKeyId = signedPreKeyId,
+                signedPreKeyPublic = java.util.Base64.getDecoder().decode(signedPreKeyB64),
+                signedPreKeySignature = java.util.Base64.getDecoder().decode(signatureB64),
+                identityKey = java.util.Base64.getDecoder().decode(identityKeyB64),
+            )
+        } catch (_: Exception) {}
     }
 
     fun connectToPeer(peerId: String, scope: CoroutineScope) {

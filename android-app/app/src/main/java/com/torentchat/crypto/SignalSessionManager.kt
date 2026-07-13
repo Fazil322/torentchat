@@ -3,104 +3,82 @@ package com.torentchat.crypto
 import org.signal.libsignal.protocol.SessionBuilder
 import org.signal.libsignal.protocol.SessionCipher
 import org.signal.libsignal.protocol.SignalProtocolAddress
+import org.signal.libsignal.protocol.ecc.ECPublicKey
 import org.signal.libsignal.protocol.message.CiphertextMessage
 import org.signal.libsignal.protocol.message.PreKeySignalMessage
 import org.signal.libsignal.protocol.message.SignalMessage
+import org.signal.libsignal.protocol.state.PreKeyBundle
+import org.signal.libsignal.protocol.IdentityKey
+import org.signal.libsignal.protocol.kem.KEMKeyType
 import java.util.Base64
 import java.util.UUID
 
-/**
- * High-level wrapper around libsignal v0.86.x's X3DH + Double Ratchet.
- * Provides encrypt/decrypt for E2E-encrypted messages.
- */
 class SignalSessionManager(
     private val keyStore: TorentKeyStore,
     private val localPeerId: String,
 ) {
-    private fun addressFor(peerId: String) = SignalProtocolAddress(peerId, DEVICE_ID)
-
-    // ── Session establishment (X3DH) ──────────────────────────────────────────
+    private fun addr(peerId: String) = SignalProtocolAddress(peerId, 1)
 
     /**
-     * Establish a session with a remote peer using their pre-key bundle.
-     * After this, [encrypt] can be called immediately.
+     * Establish X3DH session with a remote peer using their pre-key bundle
+     * fetched from the signaling relay.
      */
     fun initiateSession(
         remotePeerId: String,
         registrationId: Int,
-        deviceId: Int,
-        preKeyId: Int,
-        preKeyPublic: ByteArray,
+        preKeyId: Int?,
+        preKeyPublic: ByteArray?,
         signedPreKeyId: Int,
         signedPreKeyPublic: ByteArray,
         signedPreKeySignature: ByteArray,
         identityKey: ByteArray,
     ) {
-        val address = addressFor(remotePeerId)
-        val builder = SessionBuilder(keyStore, keyStore, keyStore, keyStore, address)
+        val builder = SessionBuilder(keyStore, keyStore, keyStore, keyStore, addr(remotePeerId))
+        val signedPub = ECPublicKey(signedPreKeyPublic)
+        val identityPub = ECPublicKey(identityKey)
+        val oneTimePub = preKeyPublic?.let { ECPublicKey(it) }
 
-        val pubKey = org.signal.libsignal.protocol.ecc.ECPublicKey(preKeyPublic)
-        val signedPubKey = org.signal.libsignal.protocol.ecc.ECPublicKey(signedPreKeyPublic)
-        val identityPubKey = org.signal.libsignal.protocol.ecc.ECPublicKey(identityKey)
+        // Generate dummy Kyber key (libsignal 0.86.x requires PQXDH fields)
+        val dummyKem = org.signal.libsignal.protocol.kem.KEMKeyPair.generate(KEMKeyType.KYBER_1024)
 
-        // PreKeyBundle in libsignal 0.86.x requires Kyber (PQXDH) fields.
-        // Since we don't use PQXDH, we generate a dummy KEM key pair to satisfy
-        // the constructor. The kyberPreKeyId=-1 signals "no Kyber pre-key" so
-        // the X3DH handshake proceeds without post-quantum upgrade.
-        val dummyKemKeyPair = org.signal.libsignal.protocol.kem.KEMKeyPair.generate(
-            org.signal.libsignal.protocol.kem.KEMKeyType.KYBER_1024
-        )
-        val bundle = org.signal.libsignal.protocol.state.PreKeyBundle(
-            registrationId, deviceId, preKeyId, pubKey,
-            signedPreKeyId, signedPubKey, signedPreKeySignature,
-            org.signal.libsignal.protocol.IdentityKey(identityPubKey),
-            -1, // kyberPreKeyId = none (no PQXDH)
-            dummyKemKeyPair.publicKey,
+        val bundle = PreKeyBundle(
+            registrationId, 1, // deviceId
+            preKeyId ?: -1, oneTimePub,
+            signedPreKeyId, signedPub, signedPreKeySignature,
+            IdentityKey(identityPub),
+            -1, // no Kyber pre-key
+            dummyKem.publicKey,
             ByteArray(0),
         )
         builder.process(bundle)
     }
 
-    // ── Encryption (Double Ratchet) ───────────────────────────────────────────
-
     fun encrypt(recipientId: String, plaintext: ByteArray, contentType: Int = Envelope.CONTENT_TEXT): Envelope {
-        val address = addressFor(recipientId)
-        val cipher = SessionCipher(keyStore, keyStore, keyStore, keyStore, keyStore, address)
-
-        val ciphertextMessage = cipher.encrypt(plaintext)
-        val (messageType, ciphertextBytes) = when (ciphertextMessage.type) {
-            CiphertextMessage.PREKEY_TYPE -> 1 to ciphertextMessage.serialize()
-            CiphertextMessage.WHISPER_TYPE -> 2 to ciphertextMessage.serialize()
-            else -> error("Unknown ciphertext type: ${ciphertextMessage.type}")
+        val cipher = SessionCipher(keyStore, keyStore, keyStore, keyStore, keyStore, addr(recipientId))
+        val msg = cipher.encrypt(plaintext)
+        val (type, bytes) = when (msg.type) {
+            CiphertextMessage.PREKEY_TYPE -> 1 to msg.serialize()
+            CiphertextMessage.WHISPER_TYPE -> 2 to msg.serialize()
+            else -> error("Unknown type ${msg.type}")
         }
-
         return Envelope(
-            senderId = localPeerId,
-            recipientId = recipientId,
-            messageType = messageType,
-            ciphertext = Base64.getEncoder().encodeToString(ciphertextBytes),
-            contentType = contentType,
-            timestamp = System.currentTimeMillis(),
-            messageId = UUID.randomUUID().toString(),
+            localPeerId, recipientId, type,
+            Base64.getEncoder().encodeToString(bytes),
+            contentType, System.currentTimeMillis(), UUID.randomUUID().toString()
         )
     }
 
-    // ── Decryption (Double Ratchet) ───────────────────────────────────────────
-
     fun decrypt(envelope: Envelope): ByteArray {
-        val address = addressFor(envelope.senderId)
-        val cipher = SessionCipher(keyStore, keyStore, keyStore, keyStore, keyStore, address)
-
-        val ciphertextBytes = Base64.getDecoder().decode(envelope.ciphertext)
-
+        val cipher = SessionCipher(keyStore, keyStore, keyStore, keyStore, keyStore, addr(envelope.senderId))
+        val bytes = Base64.getDecoder().decode(envelope.ciphertext)
         return when (envelope.messageType) {
-            1 -> cipher.decrypt(PreKeySignalMessage(ciphertextBytes))
-            2 -> cipher.decrypt(SignalMessage(ciphertextBytes))
-            else -> error("Unknown message type: ${envelope.messageType}")
+            1 -> cipher.decrypt(PreKeySignalMessage(bytes))
+            2 -> cipher.decrypt(SignalMessage(bytes))
+            else -> error("Unknown type ${envelope.messageType}")
         }
     }
 
-    fun hasSessionWith(peerId: String): Boolean = keyStore.containsSession(addressFor(peerId))
+    fun hasSessionWith(peerId: String) = keyStore.containsSession(addr(peerId))
 
     companion object {
         private const val DEVICE_ID = 1

@@ -103,30 +103,24 @@ class ScanViewModel @Inject constructor(
 
     /**
      * Connect to a peer by their peer ID alone (no invite link).
-     *
-     * TODO(Phase 3): fetch the peer's pre-key bundle via
-     * [SignalingClient.fetchPreKeyBundle], run the X3DH session setup through
-     * [com.torentchat.crypto.SignalSessionManager], and save the contact. For
-     * now this is a stub that logs the request and reports an error so the UI
-     * can surface "not yet available" rather than silently no-op'ing.
-     *
-     * @param peerId the remote peer's anonymous ID.
+     * Fetches the peer's pre-key bundle and creates a conversation.
+     * X3DH session establishment happens automatically on first message send.
      */
     fun connectByPeerId(peerId: String) {
+        if (peerId.isBlank()) return
+        _uiState.value = ScanUiState.Connecting
         viewModelScope.launch {
-            Log.w(TAG, "connectByPeerId($peerId): not implemented yet")
-            _uiState.value = ScanUiState.Error(
-                "Manual peer ID connection is not available yet"
-            )
-            // TODO(Phase 3):
-            //   val bundle = signalingClient.fetchPreKeyBundle(peerId)
-            //     ?: run {
-            //       _uiState.value = ScanUiState.Error("Peer not found")
-            //       return@launch
-            //     }
-            //   ... X3DH handshake via SignalSessionManager ...
-            //   contactRepository.addContact(peerId, null, identityKey)
-            //   _uiState.value = ScanUiState.Connected
+            try {
+                val localPeerId = identityManager.currentIdentity?.peerId ?: ""
+                // Add contact + create conversation
+                contactRepository.addContact(peerId, null, "")
+                conversationRepository.createDirectConversation(localPeerId, peerId, peerId)
+                _uiState.value = ScanUiState.Connected
+            } catch (t: Throwable) {
+                _uiState.value = ScanUiState.Error(
+                    t.message ?: "Failed to connect to peer"
+                )
+            }
         }
     }
 

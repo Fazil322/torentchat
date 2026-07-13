@@ -47,23 +47,23 @@ export async function handleGetPreKeys(
 
   const bundle = JSON.parse(bundleRaw);
 
-  // Consume one one-time pre-key if available (X3DH requires this for forward secrecy).
-  // The client replenishes via /v1/register periodically.
-  let consumedPreKeyId: string | null = null;
+  // Consume one one-time pre-key if available (X3DH forward secrecy).
+  let consumedPreKey: { id: number; publicKey: string } | null = null;
   if (bundle.oneTimePreKeys && bundle.oneTimePreKeys.length > 0) {
-    consumedPreKeyId = bundle.oneTimePreKeys.shift();
-    ctx.waitUntil(env.SIGNALING.put(`bundle:${peerId}`, JSON.stringify(bundle)));
+    consumedPreKey = bundle.oneTimePreKeys.shift();
+    // Must await (not waitUntil) to avoid race condition (W-3)
+    await env.SIGNALING.put(`bundle:${peerId}`, JSON.stringify(bundle));
   }
 
   return json({
     peerId,
     identityKey: bundle.identityKey,
+    signedPreKeyId: bundle.signedPreKeyId,
     signedPreKey: bundle.signedPreKey,
     signature: bundle.signature,
-    oneTimePreKey: consumedPreKeyId
-      ? bundle.oneTimePreKeysRaw?.[consumedPreKeyId] ?? null
-      : null,
-    oneTimePreKeyId: consumedPreKeyId,
+    registrationId: bundle.registrationId ?? 0,
+    oneTimePreKeyId: consumedPreKey?.id ?? null,
+    oneTimePreKey: consumedPreKey?.publicKey ?? null,
   });
 }
 
