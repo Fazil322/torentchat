@@ -47,14 +47,6 @@ compose.desktop {
     application {
         mainClass = "com.torentchat.desktop.MainKt"
 
-        // Enable ProGuard for release builds
-        buildTypes.release.proguard {
-            isEnabled = true
-            obfuscate = true
-            optimize = true
-            configFiles.from("proguard-rules.pro")
-        }
-
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Deb)
             packageName = "TorentChat"
