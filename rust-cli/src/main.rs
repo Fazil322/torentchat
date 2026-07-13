@@ -1,13 +1,11 @@
 // TorentChat CLI — Rust native binary (no JVM)
 // P2P encrypted chat. Same Cloudflare Worker backend.
-// E2EE: ECDH P-256 + AES-256-GCM.
+// E2EE: X25519 (Curve25519) + AES-256-GCM.
 
 use anyhow::{anyhow, Result};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 use aes_gcm::aead::{Aead, KeyInit};
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
-use p256::{PublicKey, SecretKey, EncodedPoint};
-use p256::ecdh::diffie_hellman;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -17,27 +15,23 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
+use x25519_dalek::{PublicKey, StaticSecret};
 
 const RELAY: &str = "https://torentchat-worker.ztik-user.workers.dev";
 
 // ─── Crypto ───────────────────────────────────────────────────────────────────
 
-fn gen_keypair() -> (SecretKey, PublicKey) {
+fn gen_keypair() -> (StaticSecret, PublicKey) {
     let mut rng = rand::thread_rng();
-    let secret = SecretKey::random(&mut rng);
-    let public = secret.public_key();
+    let secret = StaticSecret::random_from_rng(&mut rng);
+    let public = PublicKey::from(&secret);
     (secret, public)
 }
 
-fn pub_key_bytes(pk: &PublicKey) -> Vec<u8> {
-    EncodedPoint::from(pk).to_bytes().to_vec()
-}
-
-fn derive_key(my_secret: &SecretKey, their_public: &PublicKey) -> [u8; 32] {
-    let shared = diffie_hellman(my_secret.to_nonzero_scalar(), their_public);
-    let raw = shared.raw_secret_bytes();
+fn derive_key(my_secret: &StaticSecret, their_public: &PublicKey) -> [u8; 32] {
+    let shared = my_secret.diffie_hellman(their_public);
     let mut hasher = Sha256::new();
-    hasher.update(raw);
+    hasher.update(shared.to_bytes());
     let hash = hasher.finalize();
     let mut key = [0u8; 32];
     key.copy_from_slice(&hash);
@@ -47,7 +41,7 @@ fn derive_key(my_secret: &SecretKey, their_public: &PublicKey) -> [u8; 32] {
 fn encrypt(key: &[u8; 32], plaintext: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
     let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
     let mut nonce_bytes = [0u8; 12];
-    rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut nonce_bytes);
+    rand::thread_rng().fill_bytes(&mut nonce_bytes);
     let nonce = Nonce::from_slice(&nonce_bytes);
     let ct = cipher.encrypt(nonce, plaintext)
         .map_err(|e| anyhow!("encrypt: {e}"))?;
@@ -116,14 +110,13 @@ fn save_identity(id: &Identity) -> Result<()> {
 
 fn create_identity() -> Result<Identity> {
     let (secret, public) = gen_keypair();
-    let pub_bytes = pub_key_bytes(&public);
+    let pub_bytes = public.to_bytes();
     let pid = peer_id_from_pub(&pub_bytes);
-    // Serialize: just store raw bytes as B64
     let priv_bytes = secret.to_bytes();
     let id = Identity {
         peer_id: pid,
-        public_key_b64: B64.encode(&pub_bytes),
-        private_key_b64: B64.encode(&priv_bytes),
+        public_key_b64: B64.encode(pub_bytes),
+        private_key_b64: B64.encode(priv_bytes),
     };
     save_identity(&id)?;
     Ok(id)
@@ -131,15 +124,16 @@ fn create_identity() -> Result<Identity> {
 
 fn parse_pub_key(b64: &str) -> Result<PublicKey> {
     let bytes = B64.decode(b64.as_bytes())?;
-    let pt = EncodedPoint::from_bytes(&bytes)
-        .map_err(|e| anyhow!("pubkey parse: {e}"))?;
-    PublicKey::from_sec1_bytes(pt.as_bytes())
-        .map_err(|e| anyhow!("pubkey sec1: {e}"))
+    let arr: [u8; 32] = bytes.as_slice().try_into()
+        .map_err(|_| anyhow!("pubkey must be 32 bytes"))?;
+    Ok(PublicKey::from(arr))
 }
 
-fn parse_priv_key(b64: &str) -> Result<SecretKey> {
+fn parse_priv_key(b64: &str) -> Result<StaticSecret> {
     let bytes = B64.decode(b64.as_bytes())?;
-    SecretKey::from_slice(&bytes).map_err(|e| anyhow!("privkey: {e}"))
+    let arr: [u8; 32] = bytes.as_slice().try_into()
+        .map_err(|_| anyhow!("privkey must be 32 bytes"))?;
+    Ok(StaticSecret::from(arr))
 }
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
@@ -219,7 +213,6 @@ impl Chat {
         let env_json = serde_json::to_string(&env)?;
         store_pending(&self.http, &self.identity.peer_id, peer_id, &env_json).await?;
 
-        // Store locally
         let mut s = self.store.write().await;
         let cid = conv_id(&self.identity.peer_id, peer_id);
         if !s.conversations.iter().any(|c| c.peer_id == peer_id) {
@@ -274,9 +267,7 @@ impl Chat {
         Ok(incoming)
     }
 
-    async fn list(&self) -> Vec<Conversation> {
-        self.store.read().await.conversations.clone()
-    }
+    async fn list(&self) -> Vec<Conversation> { self.store.read().await.conversations.clone() }
 
     async fn messages(&self, cid: &str) -> Vec<Message> {
         self.store.read().await.messages.iter().filter(|m| m.cid == cid).cloned().collect()
@@ -295,26 +286,19 @@ impl Chat {
 }
 
 fn conv_id(a: &str, b: &str) -> String {
-    let mut v = [a, b];
-    v.sort();
+    let mut v = [a, b]; v.sort();
     format!("direct-{}-{}", v[0], v[1])
 }
 
 // ─── CLI ──────────────────────────────────────────────────────────────────────
 
-fn now_ts() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64
-}
-
-fn fmt_ts(ts: u64) -> String {
-    let s = ts / 1000;
-    format!("{:02}:{:02}", (s/3600)%24, (s/60)%60)
-}
+fn now_ts() -> u64 { SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64 }
+fn fmt_ts(ts: u64) -> String { let s = ts / 1000; format!("{:02}:{:02}", (s/3600)%24, (s/60)%60) }
 
 fn banner() {
     eprintln!("\n\x1b[36m\x1b[1m╔══════════════════════════════════════════╗\x1b[0m");
     eprintln!("\x1b[36m\x1b[1m║      🔐  TorentChat CLI (Rust)  🔐        ║\x1b[0m");
-    eprintln!("\x1b[36m\x1b[1m║  P2P Encrypted — ECDH + AES-256-GCM     ║\x1b[0m");
+    eprintln!("\x1b[36m\x1b[1m║  P2P Encrypted — X25519 + AES-256-GCM   ║\x1b[0m");
     eprintln!("\x1b[36m\x1b[1m╚══════════════════════════════════════════╝\x1b[0m\n");
 }
 
@@ -335,10 +319,7 @@ async fn main() -> Result<()> {
 
     let identity = match load_identity() {
         Some(id) => { eprintln!("\x1b[2mLoaded identity:\x1b[0m \x1b[1m{}\x1b[0m", id.peer_id); id }
-        None => {
-            eprintln!("\x1b[33mCreating new identity...\x1b[0m");
-            create_identity()?
-        }
+        None => { eprintln!("\x1b[33mCreating new identity...\x1b[0m"); create_identity()? }
     };
     eprintln!("\x1b[2mPeer ID:\x1b[0m \x1b[1m{}\x1b[0m", identity.peer_id);
     eprintln!("\x1b[2mPublic Key:\x1b[0m {}...", &identity.public_key_b64[..20]);
