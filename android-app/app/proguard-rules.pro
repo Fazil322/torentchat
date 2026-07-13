@@ -42,3 +42,8 @@
 # --- Room ---
 -keep class * extends androidx.room.RoomDatabase { *; }
 -dontwarn androidx.room.paging.**
+
+# --- SLF4J (missing impl classes — safe to ignore on Android) ---
+-dontwarn org.slf4j.impl.**
+-dontwarn org.slf4j.LoggerFactory
+-dontwarn org.slf4j.MDC
