@@ -76,22 +76,44 @@ jobs:
           name: torentchat-web-server
           path: rust-workspace/target/release/torentchat-web
 
+  build-android:
+    name: Android APK (Rust native)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install cargo-apk
+        run: cargo install -q cargo-apk
+      - name: Build APK
+        working-directory: rust-workspace/android
+        run: cargo apk build --release
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: torentchat-android-apk
+          path: rust-workspace/android/target/release/apk/*.apk
+          if-no-files-found: warn
+
   deploy-worker:
     name: Deploy Rust Worker
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      - name: Install worker-build
+      - name: Install wasm-bindgen-cli (latest)
+        run: cargo install -q wasm-bindgen-cli
+      - name: Install worker-build (latest)
         run: cargo install -q worker-build
-      - name: Build Worker
+      - name: Build Worker (WASM)
         working-directory: rust-workspace/worker
         run: worker-build --release
-        continue-on-error: true
-      - name: Deploy
+      - name: Deploy to Cloudflare
         working-directory: rust-workspace/worker
         run: npx wrangler deploy
         env:

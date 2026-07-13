@@ -1,0 +1,26 @@
+[package]
+name = "torentchat-android"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+torentchat-core.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+jni = "0.21"
+log = "0.4"
+android_logger = "0.14"
+
+[package.metadata.android]
+build_targets = ["aarch64-linux-android", "armv7-linux-androideabi", "x86_64-linux-android"]
+
+[package.metadata.android.application]
+label = "TorentChat"
+
+[package.metadata.android.application.permissions]
+"android.permission.INTERNET" = {}
