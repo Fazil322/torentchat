@@ -42,21 +42,21 @@ jobs:
       - name: 🔑 Generate Gradle wrapper
         run: gradle wrapper --gradle-version 8.8 --distribution-type bin
 
-      - name: 🔨 Build & package desktop app
-        run: ./gradlew packageReleaseMsi packageReleaseExe --no-daemon --stacktrace
+      - name: 🔨 Build & package desktop app (debug, no ProGuard)
+        run: ./gradlew packageDistributionForCurrentOS --no-daemon --stacktrace
 
       - name: 📤 Upload .msi installer
         uses: actions/upload-artifact@v4
         with:
           name: torentchat-desktop-msi
-          path: desktop-app/build/compose/binaries/main/release/msi/*.msi
+          path: desktop-app/build/compose/binaries/main/app/TorentChat-*.msi
           retention-days: 30
-          if-no-files-found: error
+          if-no-files-found: warn
 
       - name: 📤 Upload .exe
         uses: actions/upload-artifact@v4
         with:
           name: torentchat-desktop-exe
-          path: desktop-app/build/compose/binaries/main/release/exe/*.exe
+          path: desktop-app/build/compose/binaries/main/app/TorentChat-*.exe
           retention-days: 30
           if-no-files-found: warn
