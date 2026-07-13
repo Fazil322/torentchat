@@ -1,5 +1,4 @@
 // TorentChat Worker — Rust on Cloudflare Workers (WASM, workers-rs 0.8)
-// Same API as old TypeScript Worker. Same KV namespaces.
 
 use serde::{Deserialize, Serialize};
 use worker::*;
@@ -28,9 +27,13 @@ struct SignalingReq { from: String, to: String, sdp: Option<String>, candidate: 
 #[derive(Deserialize)]
 struct PresenceReq { peer_id: String, typing: Option<bool> }
 
-fn now_ts() -> u64 { Date::now() as u64 }
+fn now_ts() -> u64 {
+    js_sys::Date::now() as u64
+}
 
-fn rand_id() -> String { format!("{}{}", now_ts(), now_ts() % 100000) }
+fn rand_id() -> String {
+    format!("{}{}", now_ts(), now_ts() % 100000)
+}
 
 #[event(fetch)]
 async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
@@ -43,7 +46,7 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             let body: StorePendingReq = req.json().await?;
             let kv = env.kv("PENDING")?;
             let list_key = format!("pending-list:{}", body.to);
-            let queue: Vec<String> = kv.get(&list_key).json().await.unwrap_or_default();
+            let queue: Vec<String> = kv.get(&list_key).json().await.unwrap_or_else(|_| Vec::new());
             let mut queue = queue;
             let entry_key = format!("pending:{}:{}:{}", body.to, now_ts(), rand_id());
             let entry = PendingEnvelope { from: body.from, envelope: body.envelope, ts: now_ts() };
@@ -56,7 +59,7 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             let peer_id = ctx.param("peer_id").unwrap().to_string();
             let kv = env.kv("PENDING")?;
             let list_key = format!("pending-list:{}", peer_id);
-            let queue: Vec<String> = kv.get(&list_key).json().await.unwrap_or_default();
+            let queue: Vec<String> = kv.get(&list_key).json().await.unwrap_or_else(|_| Vec::new());
             let mut envelopes = Vec::new();
             for key in &queue {
                 if let Ok(Some(raw)) = kv.get(key).text().await {
