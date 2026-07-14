@@ -25,18 +25,16 @@ pub fn load_identity() -> Option<Identity> {
     // K-2: Try encrypted file first
     let enc_path = d.join("identity.enc");
     if enc_path.exists() {
+        // Can't decrypt without private key — which is inside the encrypted file.
+        // This is a chicken-and-egg problem. Solution: the passphrase is derived
+        // from a machine-specific key (not stored in the file).
+        // For now: try machine-specific passphrase (hostname + username)
+        let machine_id = get_machine_id();
+        let store = crate::crypto::EncryptedStore::from_passphrase(&machine_id);
         if let Ok(encrypted) = fs::read(&enc_path) {
-            // We need the peer_id to decrypt, but peer_id is inside the encrypted data.
-            // Solution: peer_id is also stored as filename hash, or we store a hint.
-            // For now: try all possible passphrases from a hint file.
-            // Simpler: store peer_id in a separate small file (not sensitive).
-            let hint_path = d.join("peer_id_hint");
-            if let Ok(peer_id) = fs::read_to_string(&hint_path) {
-                let store = crate::crypto::EncryptedStore::from_passphrase(&peer_id);
-                if let Ok(plaintext) = store.decrypt_data(&encrypted) {
-                    if let Ok(id) = serde_json::from_slice::<Identity>(&plaintext) {
-                        return Some(id);
-                    }
+            if let Ok(plaintext) = store.decrypt_data(&encrypted) {
+                if let Ok(id) = serde_json::from_slice::<Identity>(&plaintext) {
+                    return Some(id);
                 }
             }
         }
@@ -53,17 +51,29 @@ pub fn load_identity() -> Option<Identity> {
     None
 }
 
+/// Machine-specific ID for encryption passphrase (not stored in plaintext files)
+pub fn get_machine_id() -> String {
+    let username = std::env::var("USER").or_else(|_| std::env::var("USERNAME")).unwrap_or_else(|_| "user".into());
+    let hostname = std::env::var("HOSTNAME").or_else(|_| std::env::var("COMPUTERNAME")).unwrap_or_else(|_| "host".into());
+    let combined = format!("torentchat:{}:{}", username, hostname);
+    let mut h = sha2::Sha256::new();
+    sha2::Digest::update(&mut h, combined.as_bytes());
+    crate::crypto::b64_encode(&h.finalize())
+}
+
 pub fn save_identity(id: &Identity) -> Result<()> {
     let d = data_dir();
     fs::create_dir_all(&d)?;
-    // K-2: Encrypt identity at rest using peer_id as passphrase (user doesn't need to remember it)
-    let store = crate::crypto::EncryptedStore::from_passphrase(&id.peer_id);
+    // K-2: Encrypt identity with machine-specific passphrase
+    // Attacker needs both the file AND access to this machine to decrypt
+    let machine_id = get_machine_id();
+    let store = crate::crypto::EncryptedStore::from_passphrase(&machine_id);
     let plaintext = serde_json::to_vec(id)?;
     let encrypted = store.encrypt_data(&plaintext)?;
     fs::write(d.join("identity.enc"), encrypted)?;
-    // Save peer_id hint for decryption (peer_id is not sensitive — it's public)
+    // peer_id_hint stores peer_id (public, not sensitive) for display before decrypt
     fs::write(d.join("peer_id_hint"), &id.peer_id)?;
-    // Remove old plaintext file if exists
+    // Remove old plaintext files if exist
     let _ = fs::remove_file(d.join("identity.json"));
     Ok(())
 }

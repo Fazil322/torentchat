@@ -55,19 +55,37 @@ pub struct Store {
 }
 
 pub fn store_file() -> PathBuf {
-    crate::identity::data_dir().join("store.json")
+    crate::identity::data_dir().join("store.enc")
 }
 
 pub fn load_store() -> Store {
-    fs::read_to_string(store_file()).ok()
+    let path = store_file();
+    if !path.exists() { return Store::default(); }
+    // K-3: Try encrypted first
+    if let Ok(encrypted) = fs::read(&path) {
+        let machine_id = crate::identity::get_machine_id();
+        let store = crate::crypto::EncryptedStore::from_passphrase(&machine_id);
+        if let Ok(plaintext) = store.decrypt_data(&encrypted) {
+            if let Ok(s) = serde_json::from_slice::<Store>(&plaintext) {
+                return s;
+            }
+        }
+    }
+    // Fallback: try old plaintext (migration)
+    fs::read_to_string(&path).ok()
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default()
 }
 
 pub fn save_store(s: &Store) {
     let _ = fs::create_dir_all(crate::identity::data_dir());
-    if let Ok(j) = serde_json::to_string_pretty(s) {
-        let _ = fs::write(store_file(), j);
+    if let Ok(j) = serde_json::to_vec(s) {
+        // K-3: Encrypt store with machine-specific passphrase
+        let machine_id = crate::identity::get_machine_id();
+        let store = crate::crypto::EncryptedStore::from_passphrase(&machine_id);
+        if let Ok(encrypted) = store.encrypt_data(&j) {
+            let _ = fs::write(store_file(), encrypted);
+        }
     }
 }
 

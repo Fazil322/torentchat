@@ -137,15 +137,17 @@ impl SessionManager {
         let mut sessions = self.sessions.lock().unwrap();
         let session = sessions.get_mut(peer_id).ok_or_else(|| anyhow!("No session for {}", peer_id))?;
 
+        // S-2: Replay prevention — cek counter SEBELUM advance ratchet
+        // recv_counter adalah counter pesan terakhir yang berhasil diterima
+        let last_counter = session.recv_counter;
+        if envelope.counter <= last_counter {
+            return Err(anyhow!("Replay detected: counter {} <= last {}", envelope.counter, last_counter));
+        }
+
+        // Baru advance ratchet SETELAH validasi counter lolos
         let msg_key = session.next_recv_key();
-        let recv_counter = session.recv_counter();
         drop(sessions);
         self.persist();
-
-        // S-2: Replay prevention — reject if counter is too old
-        if envelope.counter < recv_counter {
-            return Err(anyhow!("Replay detected: counter {} < expected {}", envelope.counter, recv_counter));
-        }
 
         let ciphertext = B64.decode(envelope.ciphertext.as_bytes())?;
         let nonce = B64.decode(envelope.iv.as_bytes())?;
@@ -298,20 +300,27 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 
 /// K-4: Persist ratchet sessions to disk
 fn sessions_file() -> std::path::PathBuf {
-    crate::identity::data_dir().join("sessions.json")
+    crate::identity::data_dir().join("sessions.enc")
 }
 
 fn save_sessions(sessions: &HashMap<String, RatchetState>) -> Result<()> {
-    let json = serde_json::to_string(sessions)?;
-    std::fs::write(sessions_file(), json)?;
+    let json = serde_json::to_vec(sessions)?;
+    // K-NEW: Encrypt sessions with machine-specific passphrase
+    let machine_id = crate::identity::get_machine_id();
+    let store = EncryptedStore::from_passphrase(&machine_id);
+    let encrypted = store.encrypt_data(&json)?;
+    std::fs::write(sessions_file(), encrypted)?;
     Ok(())
 }
 
 fn load_sessions() -> Result<HashMap<String, RatchetState>> {
     let path = sessions_file();
     if !path.exists() { return Ok(HashMap::new()); }
-    let json = std::fs::read_to_string(&path)?;
-    Ok(serde_json::from_str(&json)?)
+    let encrypted = std::fs::read(&path)?;
+    let machine_id = crate::identity::get_machine_id();
+    let store = EncryptedStore::from_passphrase(&machine_id);
+    let plaintext = store.decrypt_data(&encrypted)?;
+    Ok(serde_json::from_slice(&plaintext)?)
 }
 
 // ─── Encrypted local store (AES-256 at rest) ──────────────────────────────────
