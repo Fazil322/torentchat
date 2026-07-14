@@ -5,18 +5,47 @@ use std::path::PathBuf;
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Conversation {
     pub id: String, pub title: String, pub peer_id: String,
-    pub public_key: String, pub last_preview: Option<String>, pub last_ts: Option<u64>,
-    pub conv_type: Option<String>, // "direct" or "group"
-    pub members: Option<Vec<String>>, // for group chat
-    pub auto_delete_ms: Option<u64>, // ephemeral: auto-delete after this duration
+    pub public_key: String,
+    #[serde(default)]
+    pub last_preview: Option<String>,
+    #[serde(default)]
+    pub last_ts: Option<u64>,
+    #[serde(default)]
+    pub conv_type: Option<String>,
+    #[serde(default)]
+    pub members: Option<Vec<String>>,
+    #[serde(default)]
+    pub auto_delete_ms: Option<u64>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Message {
     pub id: String, pub cid: String, pub sender: String,
     pub content: String, pub ts: u64, pub out: bool,
-    pub read: bool, // read receipt
-    pub msg_type: Option<String>, // "text", "image", "system", "read_receipt"
+    #[serde(default)]
+    pub read: bool,
+    #[serde(default)]
+    pub msg_type: Option<String>,
+}
+
+impl Conversation {
+    pub fn new_direct(id: String, title: String, peer_id: String, public_key: String) -> Self {
+        Conversation {
+            id, title, peer_id, public_key,
+            last_preview: None, last_ts: None,
+            conv_type: Some("direct".into()),
+            members: None, auto_delete_ms: None,
+        }
+    }
+}
+
+impl Message {
+    pub fn new_text(id: String, cid: String, sender: String, content: String, ts: u64, out: bool) -> Self {
+        Message {
+            id, cid, sender, content, ts, out,
+            read: false, msg_type: Some("text".into()),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Default, Clone)]

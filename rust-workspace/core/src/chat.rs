@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 
-use crate::crypto::{self, SessionManager, SecureEnvelope, EncryptedStore};
+use crate::crypto::{self, SessionManager, SecureEnvelope};
 use crate::data::*;
 use crate::identity::Identity;
 use crate::signaling::Signaling;
@@ -29,17 +29,14 @@ impl Chat {
         let my_secret = crypto::parse_priv_key(&self.identity.private_key_b64)?;
         let their_pub = crypto::parse_pub_key(peer_pub_b64)?;
 
-        // Establish ratchet session if not exists
         if !self.sessions.has_session(peer_id) {
             let shared = crypto::derive_key(&my_secret, &their_pub);
             self.sessions.establish(peer_id, &shared);
         }
 
-        // Encrypt with per-message ratcheted key + HMAC
         let envelope = self.sessions.encrypt(peer_id, content.as_bytes())?;
         let now = now_ts();
 
-        // Wrap in wire envelope for transport
         let wire = serde_json::json!({
             "sender_id": self.identity.peer_id,
             "recipient_id": peer_id,
@@ -53,22 +50,20 @@ impl Chat {
         let env_json = serde_json::to_string(&wire)?;
         self.signaling.store_pending(&self.identity.peer_id, peer_id, &env_json).await?;
 
-        // Update local store
         let store_clone = {
             let mut s = self.store.write().await;
             let cid = conv_id(&self.identity.peer_id, peer_id);
             if !s.conversations.iter().any(|c| c.peer_id == peer_id) {
-                s.conversations.push(Conversation {
-                    id: cid.clone(), title: peer_id.into(), peer_id: peer_id.into(),
-                    public_key: peer_pub_b64.into(), last_preview: None, last_ts: None,
-                });
+                s.conversations.push(Conversation::new_direct(
+                    cid.clone(), peer_id.to_string(), peer_id.to_string(), peer_pub_b64.to_string()
+                ));
             }
-            s.messages.push(Message {
-                id: uuid::Uuid::new_v4().to_string(), cid, sender: self.identity.peer_id.clone(),
-                content: content.into(), ts: now, out: true,
-            });
+            s.messages.push(Message::new_text(
+                uuid::Uuid::new_v4().to_string(), cid,
+                self.identity.peer_id.clone(), content.to_string(), now, true
+            ));
             if let Some(c) = s.conversations.iter_mut().find(|c| c.peer_id == peer_id) {
-                c.last_preview = Some(content.into());
+                c.last_preview = Some(content.to_string());
                 c.last_ts = Some(now);
             }
             s.clone()
@@ -98,7 +93,6 @@ impl Chat {
                     let conv = s.conversations.iter().find(|c| c.peer_id == sender_id).cloned();
 
                     if let Some(conv) = conv {
-                        // Establish session if needed
                         if !self.sessions.has_session(sender_id) {
                             if let Ok(their_pub) = crypto::parse_pub_key(&conv.public_key) {
                                 let shared = crypto::derive_key(&my_secret, &their_pub);
@@ -116,19 +110,17 @@ impl Chat {
                                 Ok(pt) => {
                                     let content = String::from_utf8_lossy(&pt).to_string();
                                     let cid = conv_id(&self.identity.peer_id, sender_id);
-                                    s.messages.push(Message {
-                                        id: message_id, cid, sender: sender_id.to_string(),
-                                        content: content.clone(), ts: timestamp, out: false,
-                                    });
+                                    s.messages.push(Message::new_text(
+                                        message_id, cid, sender_id.to_string(),
+                                        content.clone(), timestamp, false
+                                    ));
                                     if let Some(c) = s.conversations.iter_mut().find(|c| c.peer_id == sender_id) {
                                         c.last_preview = Some(content.clone());
                                         c.last_ts = Some(timestamp);
                                     }
                                     incoming.push((sender_id.to_string(), content));
                                 }
-                                Err(_) => {
-                                    // HMAC failed or decryption error — skip (possible tampering)
-                                }
+                                Err(_) => {}
                             }
                         }
                     }
@@ -150,10 +142,10 @@ impl Chat {
         let store_clone = {
             let mut s = self.store.write().await;
             if !s.conversations.iter().any(|c| c.peer_id == peer_id) {
-                s.conversations.push(Conversation {
-                    id: conv_id(&self.identity.peer_id, peer_id), title: peer_id.into(),
-                    peer_id: peer_id.into(), public_key: pub_key.into(), last_preview: None, last_ts: None,
-                });
+                s.conversations.push(Conversation::new_direct(
+                    conv_id(&self.identity.peer_id, peer_id), peer_id.to_string(),
+                    peer_id.to_string(), pub_key.to_string()
+                ));
             }
             s.clone()
         };
@@ -164,10 +156,10 @@ impl Chat {
         let store_clone = {
             let mut s = self.store.blocking_write();
             if !s.conversations.iter().any(|c| c.peer_id == peer_id) {
-                s.conversations.push(Conversation {
-                    id: conv_id(&self.identity.peer_id, peer_id), title: peer_id.into(),
-                    peer_id: peer_id.into(), public_key: pub_key.into(), last_preview: None, last_ts: None,
-                });
+                s.conversations.push(Conversation::new_direct(
+                    conv_id(&self.identity.peer_id, peer_id), peer_id.to_string(),
+                    peer_id.to_string(), pub_key.to_string()
+                ));
             }
             s.clone()
         };
@@ -178,7 +170,6 @@ impl Chat {
         self.signaling.set_presence(&self.identity.peer_id, typing).await
     }
 
-    /// Get safety number for verifying peer identity (out-of-band verification)
     pub fn safety_number(&self, peer_id: &str) -> Option<String> {
         let my_pub = crypto::b64_decode(&self.identity.public_key_b64).ok()?;
         let s = self.store.blocking_read();
@@ -187,7 +178,6 @@ impl Chat {
         self.sessions.safety_number(peer_id, &my_pub, &their_pub)
     }
 
-    /// Delete all messages in a conversation (ephemeral/auto-delete)
     pub fn delete_messages(&self, cid: &str) {
         let store_clone = {
             let mut s = self.store.blocking_write();
@@ -197,7 +187,6 @@ impl Chat {
         save_store(&store_clone);
     }
 
-    /// Auto-delete messages older than max_age_ms
     pub fn auto_delete_old(&self, max_age_ms: u64) {
         let now = now_ts();
         let store_clone = {

@@ -61,12 +61,4 @@ impl Signaling {
         }
         Ok(serde_json::from_str(&resp.text().await?)?)
     }
-
-    pub async fn get_presence(&self, pid: &str) -> Result<PresenceResp> {
-        let resp = self.http.get(format!("{RELAY_URL}/v1/presence/{pid}")).send().await?;
-        if !resp.status().is_success() {
-            anyhow::bail!("get_presence failed: HTTP {}", resp.status());
-        }
-        Ok(serde_json::from_str(&resp.text().await?)?)
-    }
 }

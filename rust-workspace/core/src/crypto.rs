@@ -54,7 +54,7 @@ impl RatchetState {
 
     fn advance_chain(chain_key: &mut [u8; 32]) {
         let mut h = Sha256::new();
-        h.update(chain_key);
+        h.update(&*chain_key);
         h.update(b"next");
         chain_key.copy_from_slice(&h.finalize());
     }
@@ -72,6 +72,10 @@ impl RatchetState {
         self.recv_counter += 1;
         msg_key
     }
+
+    pub fn send_counter(&self) -> u64 { self.send_counter }
+    pub fn recv_counter(&self) -> u64 { self.recv_counter }
+}
 
     pub fn send_counter(&self) -> u64 { self.send_counter }
     pub fn recv_counter(&self) -> u64 { self.recv_counter }
