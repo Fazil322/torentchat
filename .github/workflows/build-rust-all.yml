@@ -119,24 +119,35 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.1.0-rust
-          name: TorentChat v0.1.0 (Rust Native)
+          tag_name: v0.2.0-firebase
+          name: TorentChat v0.2.0 (Rust + Firebase)
           body: |
-            ## 🔐 TorentChat — 100% Rust Native
+            ## 🔐 TorentChat — 100% Rust + Firebase
 
-            All platforms rewritten in Rust. No JVM, no Node.js, no Kotlin.
+            Native Rust binaries. No JVM, no Node.js, no Kotlin.
+            Backend: Firebase Realtime Database (signaling + peer registry).
+            Messages: E2E encrypted (X25519 + AES-256-GCM + per-message ratchet + HMAC).
+            Zero server storage: messages stored temporarily only when peer offline.
 
             ### Downloads
-            - **CLI**: torentchat-cli-linux, torentchat-cli-windows.exe, torentchat-cli-macos
-            - **Desktop**: torentchat-desktop-linux, torentchat-desktop-windows.exe
-            - **Web**: torentchat-web-server
-            - **Android**: torentchat-android-apk
+            - **CLI**: torentchat (Linux), torentchat.exe (Windows), torentchat (macOS)
+            - **Desktop**: torentchat-desktop (Linux), torentchat-desktop.exe (Windows)
+            - **Web**: torentchat-web (native server binary)
+            - **Android**: torentchat-android.apk (Rust JNI, arm64)
 
             ### Crypto
-            X25519 + AES-256-GCM (same across all platforms)
+            - X25519 key exchange (x25519-dalek)
+            - AES-256-GCM encryption (aes-gcm)
+            - Per-message key ratchet (forward secrecy)
+            - HMAC-SHA256 authentication + integrity
+            - SHA-256 key derivation
 
             ### Backend
-            Cloudflare Worker (Rust → WASM)
+            Firebase Realtime Database (chat-6641f, asia-southeast1)
+            - Peer registry: lookup public key by peer ID
+            - Signaling: SDP/ICE relay for WebRTC
+            - Offline messages: E2E encrypted cache (read-once, auto-delete)
+            - Presence: online/typing indicators
           files: release/*
           draft: false
           prerelease: false

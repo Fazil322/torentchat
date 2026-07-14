@@ -1,56 +1,61 @@
-# 🔐 TorentChat — 100% Rust
+# 🔐 TorentChat — 100% Rust + Firebase
 
-> P2P encrypted chat. Semua code — backend, CLI, desktop, web — ditulis dalam **Rust murni**. Biner native, no JVM, no Node.js, no Kotlin.
+> P2P encrypted chat. Semua kode dalam **Rust murni**. Backend: **Firebase Realtime Database**.
 
-## 🦀 Stack (Semua Rust)
+## 🦀 Stack
 
-| Komponen | Crate | Output | Ukuran |
-|---|---|---|---|
-| **Backend** | `workers-rs` (WASM) | Cloudflare Worker | ~100 KB |
-| **CLI** | `tokio` + `x25519-dalek` | Native binary | ~2 MB |
-| **Desktop** | `eframe` + `egui` | Native GUI binary | ~5 MB |
-| **Web** | `axum` | Native web server | ~10 MB |
-| **Core** | Shared library | (static lib) | — |
+| Komponen | Crate | Output |
+|---|---|---|
+| **Core** | shared library | static lib |
+| **CLI** | tokio + x25519-dalek | Native binary (~2 MB) |
+| **Desktop** | eframe + egui | Native GUI binary (~5 MB) |
+| **Web** | axum | Native server binary (~3 MB) |
+| **Android** | jni + cargo-apk | APK (~65 MB, arm64) |
+| **Backend** | Firebase RTDB | Serverless (no Worker) |
+
+## 🔐 Security
+
+- **Key exchange**: X25519 (x25519-dalek)
+- **Encryption**: AES-256-GCM (aes-gcm)
+- **Forward secrecy**: Per-message key ratchet (HMAC-SHA256 chain)
+- **Integrity**: HMAC-SHA256 on every message
+- **Replay prevention**: Per-message counter
+- **Safety number**: 12-digit hash for out-of-band verification
 
 ## 📁 Struktur
 
 ```
 rust-workspace/
-├── Cargo.toml          # Workspace root
-├── core/               # Shared library (crypto, signaling, chat)
-│   └── src/
-│       ├── crypto.rs   # X25519 + AES-256-GCM
-│       ├── signaling.rs # HTTP client to Worker
-│       ├── identity.rs  # File-based identity
-│       ├── data.rs      # JSON store
-│       └── chat.rs      # ChatService orchestrator
-├── cli/                # Terminal REPL
-├── desktop/            # egui GUI
-├── web/                # Axum web server
-└── worker/             # Rust → WASM Cloudflare Worker
+├── core/       # Shared library (crypto, signaling, identity, data, chat)
+├── cli/        # Terminal REPL
+├── desktop/    # egui GUI
+├── web/        # Axum web server
+└── android/    # JNI + cargo-apk
 ```
 
-## 🔐 Crypto
-
-- **Key exchange**: X25519 (Curve25519) via `x25519-dalek`
-- **Encryption**: AES-256-GCM via `aes-gcm`
-- **Hash**: SHA-256 via `sha2`
-- **Peer ID**: SHA-256(publicKey) → Base32 → `XXXX-XXXX`
-
-## 🚀 Build
+## 🚀 Cara Pakai
 
 ```bash
-cd rust-workspace
-cargo build --release    # Build semua
+# CLI (Linux/macOS)
+./torentchat
+# > /id              → lihat Peer ID Anda
+# > /connect <peerId> → connect (auto-lookup dari Firebase)
+# > /send <peerId> <msg> → kirim pesan terenkripsi
+# > /poll            → cek pesan masuk
+
+# Desktop
+./torentchat-desktop
+
+# Web server
+./torentchat-web    # buka http://localhost:3000
+
+# Android
+adb install torentchat-android.apk
 ```
 
-## 📦 Artifacts
+## 📥 Download
 
-Download dari [GitHub Actions](https://github.com/Fazil322/torentchat/actions):
-- `torentchat-cli-linux` / `torentchat-cli-windows.exe` / `torentchat-cli-macos`
-- `torentchat-desktop-linux` / `torentchat-desktop-windows.exe` / `torentchat-desktop-macos`
-- `torentchat-web-server`
-- Worker auto-deployed to Cloudflare
+https://github.com/Fazil322/torentchat/releases
 
 ## 📜 License
 
