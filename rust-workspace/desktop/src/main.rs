@@ -25,9 +25,10 @@ impl App {
         let id = identity::load_identity().unwrap_or_else(|| identity::create_identity().unwrap());
         let chat = Arc::new(Chat::new(id.clone()));
 
-        // Start background poller
+        // Start background poller + register on Firebase
         let chat2 = chat.clone();
         rt.spawn(async move {
+            let _ = chat2.initialize().await;
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
                 let _ = chat2.set_presence(false).await;
@@ -114,11 +115,25 @@ impl eframe::App for App {
                 }
                 Screen::Scan => {
                     ui.horizontal(|ui| { if ui.button("← Back").clicked() { self.screen = Screen::Conversations; } });
-                    ui.label("Connect to peer:");
+                    ui.label("Connect to peer by Peer ID:");
                     ui.text_edit_singleline(&mut self.manual_peer);
-                    ui.label("Public Key:");
+                    if ui.button("Hubungkan (lookup from Firebase)").clicked() && !self.manual_peer.is_empty() {
+                        let chat = self.chat.clone();
+                        let peer = self.manual_peer.clone();
+                        let status = self.status_msg.clone();
+                        self.rt.spawn(async move {
+                            match chat.connect_by_peer_id(&peer).await {
+                                Ok(pk) => { let _ = status; /* update UI */ }
+                                Err(e) => { eprintln!("Connect failed: {}", e); }
+                            }
+                        });
+                        self.status_msg = format!("Connecting to {}...", self.manual_peer);
+                        self.screen = Screen::Conversations;
+                    }
+                    ui.separator();
+                    ui.label("Or enter public key manually:");
                     ui.text_edit_singleline(&mut self.manual_key);
-                    if ui.button("Hubungkan").clicked() && !self.manual_peer.is_empty() && !self.manual_key.is_empty() {
+                    if ui.button("Connect with key").clicked() && !self.manual_peer.is_empty() && !self.manual_key.is_empty() {
                         self.chat.connect(&self.manual_peer, &self.manual_key);
                         self.status_msg = format!("Connected to {}", self.manual_peer);
                         self.screen = Screen::Conversations;

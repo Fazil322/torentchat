@@ -40,13 +40,13 @@ async fn main() -> Result<()> {
     let id = identity::load_identity().unwrap_or_else(|| identity::create_identity().unwrap());
     let chat = Arc::new(Chat::new(id));
 
-    // Background poller
+    // Background: register on Firebase + presence heartbeat (no drain — let HTTP poll handle it)
     { let chat = chat.clone();
       tokio::spawn(async move {
+        let _ = chat.initialize().await;
         loop {
-            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+            tokio::time::sleep(tokio::time::Duration::from_secs(20)).await;
             let _ = chat.set_presence(false).await;
-            let _ = chat.drain().await;
         }
       });
     }

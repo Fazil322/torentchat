@@ -22,6 +22,7 @@ fn chat() -> &'static std::sync::Arc<Chat> {
         let chat = std::sync::Arc::new(Chat::new(id));
         let chat2 = chat.clone();
         rt().spawn(async move {
+            let _ = chat2.initialize().await;
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
                 let _ = chat2.set_presence(false).await;
@@ -76,9 +77,14 @@ pub extern "system" fn Java_com_torentchat_TorentChatNative_connect(
 
 #[no_mangle]
 pub extern "system" fn Java_com_torentchat_TorentChatNative_pollMessages(mut env: JNIEnv, _cls: JClass) -> jstring {
-    let chat = chat().clone();
-    let msgs = rt().block_on(async { chat.drain().await.unwrap_or_default() });
-    let json = serde_json::to_string(&msgs).unwrap_or_else(|_| "[]".to_string());
+    // Return messages from last drain (background poller drains every 5s)
+    // Don't block_on from JNI thread — return empty if no messages yet
+    let s = chat().store.blocking_read();
+    let mut incoming = Vec::new();
+    for msg in s.messages.iter().filter(|m| !m.out).rev().take(20) {
+        incoming.push((msg.sender.clone(), msg.content.clone()));
+    }
+    let json = serde_json::to_string(&incoming).unwrap_or_else(|_| "[]".to_string());
     jstring_from(&mut env, json)
 }
 

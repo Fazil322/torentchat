@@ -27,16 +27,16 @@ impl Chat {
 
     /// Initialize: register our public key on Firebase + start background polling
     pub async fn initialize(&self) -> Result<()> {
-        // Register our public key in peer registry
-        let _ = self.signaling.register_peer(
+        // Register our public key in peer registry — MUST succeed
+        self.signaling.register_peer(
             &self.identity.peer_id,
             &self.identity.public_key_b64,
-        ).await;
+        ).await?;
 
-        // Set online presence
+        // Set online presence (best-effort)
         let _ = self.signaling.set_presence(&self.identity.peer_id, false).await;
 
-        // Drain any offline messages
+        // Drain any offline messages (best-effort)
         let _ = self.drain().await;
 
         Ok(())
@@ -128,10 +128,18 @@ impl Chat {
                     let conv = match conv {
                         Some(c) => c,
                         None => {
-                            // Try to look up sender's public key from Firebase
-                            // For now, check if we have it in offline envelope
-                            // (in production, would call lookup_peer here)
-                            continue; // skip if we don't have the peer's key
+                            // Look up sender's public key from Firebase peer registry
+                            match self.signaling.lookup_peer(sender_id).await {
+                                Ok(Some(pub_key)) => {
+                                    let new_conv = Conversation::new_direct(
+                                        conv_id(&self.identity.peer_id, sender_id),
+                                        sender_id.to_string(), sender_id.to_string(), pub_key
+                                    );
+                                    s.conversations.push(new_conv.clone());
+                                    new_conv
+                                }
+                                _ => continue, // skip if peer not found in registry
+                            }
                         }
                     };
 

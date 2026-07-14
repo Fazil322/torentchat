@@ -1,7 +1,6 @@
 [workspace]
 members = ["core", "cli", "desktop", "web", "android"]
 resolver = "2"
-exclude = ["worker"]
 
 [workspace.package]
 version = "0.1.0"
