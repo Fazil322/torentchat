@@ -152,7 +152,7 @@ impl SessionManager {
         // Safety number = hash of both public keys (deterministic, verifiable)
         let mut h = Sha256::new();
         // Sort keys for consistent ordering
-        let (a, b) = if my_pub < their_pub { (my_pub, their_pub) } { (their_pub, my_pub) };
+        let (a, b) = if my_pub < their_pub { (my_pub, their_pub) } else { (their_pub, my_pub) };
         h.update(a);
         h.update(b);
         let hash = h.finalize();
