@@ -60,7 +60,7 @@ async fn main() -> Result<()> {
         .route("/api/poll", get(poll_handler))
         .with_state(state);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await?;
     println!("TorentChat Web running on http://localhost:3000");
     axum::serve(listener, app).await?;
     Ok(())

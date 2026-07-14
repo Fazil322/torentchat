@@ -14,6 +14,7 @@ use std::sync::Mutex;
 // message_key[n] = HMAC-SHA256(chain_key[n], "msg")
 // This provides forward secrecy: compromising key[n] doesn't reveal key[n-1].
 
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct RatchetState {
     send_chain_key: [u8; 32],
     recv_chain_key: [u8; 32],
@@ -85,12 +86,21 @@ pub struct SessionManager {
 
 impl SessionManager {
     pub fn new() -> Self {
-        SessionManager { sessions: Mutex::new(HashMap::new()) }
+        // Try to load persisted sessions
+        let sessions = load_sessions().unwrap_or_default();
+        SessionManager { sessions: Mutex::new(sessions) }
+    }
+
+    fn persist(&self) {
+        let sessions = self.sessions.lock().unwrap();
+        let _ = save_sessions(&sessions);
     }
 
     pub fn establish(&self, peer_id: &str, shared_secret: &[u8; 32]) {
         let mut sessions = self.sessions.lock().unwrap();
         sessions.insert(peer_id.to_string(), RatchetState::new(shared_secret));
+        drop(sessions);
+        self.persist();
     }
 
     pub fn has_session(&self, peer_id: &str) -> bool {
@@ -103,6 +113,8 @@ impl SessionManager {
 
         let msg_key = session.next_send_key();
         let counter = session.send_counter();
+        drop(sessions);
+        self.persist();
 
         let (ciphertext, nonce) = encrypt_aes(&msg_key, plaintext)?;
 
@@ -126,19 +138,27 @@ impl SessionManager {
         let session = sessions.get_mut(peer_id).ok_or_else(|| anyhow!("No session for {}", peer_id))?;
 
         let msg_key = session.next_recv_key();
+        let recv_counter = session.recv_counter();
+        drop(sessions);
+        self.persist();
+
+        // S-2: Replay prevention — reject if counter is too old
+        if envelope.counter < recv_counter {
+            return Err(anyhow!("Replay detected: counter {} < expected {}", envelope.counter, recv_counter));
+        }
 
         let ciphertext = B64.decode(envelope.ciphertext.as_bytes())?;
         let nonce = B64.decode(envelope.iv.as_bytes())?;
         let expected_hmac = B64.decode(envelope.hmac.as_bytes())?;
 
-        // Verify HMAC (authentication + integrity)
+        // S-1: Constant-time HMAC comparison
         let mut hmac_data = Vec::new();
         hmac_data.extend_from_slice(&envelope.counter.to_le_bytes());
         hmac_data.extend_from_slice(&nonce);
         hmac_data.extend_from_slice(&ciphertext);
         let computed_hmac = hmac_sha256(&msg_key, &hmac_data);
 
-        if computed_hmac != expected_hmac.as_slice() {
+        if !constant_time_eq(&computed_hmac, &expected_hmac) {
             return Err(anyhow!("HMAC verification failed — message tampered or wrong key"));
         }
 
@@ -264,6 +284,34 @@ fn b32_encode(bytes: &[u8]) -> String {
     }
     if bits > 0 { sb.push(A[(buf << (5 - bits)) as usize % A.len()] as char); }
     sb
+}
+
+/// S-1: Constant-time comparison to prevent timing attacks
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() { return false; }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
+/// K-4: Persist ratchet sessions to disk
+fn sessions_file() -> std::path::PathBuf {
+    crate::identity::data_dir().join("sessions.json")
+}
+
+fn save_sessions(sessions: &HashMap<String, RatchetState>) -> Result<()> {
+    let json = serde_json::to_string(sessions)?;
+    std::fs::write(sessions_file(), json)?;
+    Ok(())
+}
+
+fn load_sessions() -> Result<HashMap<String, RatchetState>> {
+    let path = sessions_file();
+    if !path.exists() { return Ok(HashMap::new()); }
+    let json = std::fs::read_to_string(&path)?;
+    Ok(serde_json::from_str(&json)?)
 }
 
 // ─── Encrypted local store (AES-256 at rest) ──────────────────────────────────
