@@ -1,5 +1,6 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use sha2::Digest;
 use std::fs;
 use std::path::PathBuf;
 
@@ -57,7 +58,7 @@ pub fn get_machine_id() -> String {
     let hostname = std::env::var("HOSTNAME").or_else(|_| std::env::var("COMPUTERNAME")).unwrap_or_else(|_| "host".into());
     let combined = format!("torentchat:{}:{}", username, hostname);
     let mut h = sha2::Sha256::new();
-    sha2::Digest::update(&mut h, combined.as_bytes());
+    h.update(combined.as_bytes());
     crate::crypto::b64_encode(&h.finalize())
 }
 
