@@ -20,7 +20,9 @@ export default {
     try {
       return corsResponse(await routeRequest(request, env, ctx));
     } catch (err) {
-      return corsResponse(new Response(JSON.stringify({ error: 'internal_error' }), { status: 500, headers: { 'content-type': 'application/json' } }));
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('Worker error:', message, err);
+      return corsResponse(new Response(JSON.stringify({ error: 'internal_error', message }), { status: 500, headers: { 'content-type': 'application/json' } }));
     }
   },
 };

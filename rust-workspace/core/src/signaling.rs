@@ -30,23 +30,35 @@ impl Signaling {
 
     pub async fn store_pending(&self, from: &str, to: &str, envelope: &str) -> Result<()> {
         let body = serde_json::json!({"from":from,"to":to,"envelope":envelope,"ttl":86400});
-        self.http.post(format!("{RELAY_URL}/v1/pending")).json(&body).send().await?;
+        let resp = self.http.post(format!("{RELAY_URL}/v1/pending")).json(&body).send().await?;
+        if !resp.status().is_success() {
+            anyhow::bail!("store_pending failed: HTTP {}", resp.status());
+        }
         Ok(())
     }
 
     pub async fn fetch_pending(&self, pid: &str) -> Result<PendingResp> {
-        let r = self.http.get(format!("{RELAY_URL}/v1/pending/{pid}")).send().await?;
-        Ok(serde_json::from_str(&r.text().await?)?)
+        let resp = self.http.get(format!("{RELAY_URL}/v1/pending/{pid}")).send().await?;
+        if !resp.status().is_success() {
+            anyhow::bail!("fetch_pending failed: HTTP {}", resp.status());
+        }
+        Ok(serde_json::from_str(&resp.text().await?)?)
     }
 
     pub async fn set_presence(&self, pid: &str, typing: bool) -> Result<()> {
         let body = serde_json::json!({"peerId":pid,"typing":typing});
-        self.http.post(format!("{RELAY_URL}/v1/presence")).json(&body).send().await?;
+        let resp = self.http.post(format!("{RELAY_URL}/v1/presence")).json(&body).send().await?;
+        if !resp.status().is_success() {
+            anyhow::bail!("set_presence failed: HTTP {}", resp.status());
+        }
         Ok(())
     }
 
     pub async fn get_presence(&self, pid: &str) -> Result<PresenceResp> {
-        let r = self.http.get(format!("{RELAY_URL}/v1/presence/{pid}")).send().await?;
-        Ok(serde_json::from_str(&r.text().await?)?)
+        let resp = self.http.get(format!("{RELAY_URL}/v1/presence/{pid}")).send().await?;
+        if !resp.status().is_success() {
+            anyhow::bail!("get_presence failed: HTTP {}", resp.status());
+        }
+        Ok(serde_json::from_str(&resp.text().await?)?)
     }
 }

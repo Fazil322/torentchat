@@ -55,8 +55,8 @@ async fn main() -> Result<()> {
     let app = Router::new()
         .route("/", get(|| async { Html(HTML) }))
         .route("/api/identity", get(identity_handler))
-        .route("/api/send", get(send_handler))
-        .route("/api/connect", get(connect_handler))
+        .route("/api/send", axum::routing::post(send_handler))
+        .route("/api/connect", axum::routing::post(connect_handler))
         .route("/api/poll", get(poll_handler))
         .with_state(state);
 

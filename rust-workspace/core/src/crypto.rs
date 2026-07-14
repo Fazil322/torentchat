@@ -62,13 +62,13 @@ pub fn b64_encode(data: &[u8]) -> String { B64.encode(data) }
 pub fn b64_decode(s: &str) -> Result<Vec<u8>> { Ok(B64.decode(s.as_bytes())?) }
 
 fn b32_encode(bytes: &[u8]) -> String {
-    const A: &[u8] = b"ABCDEFGHJKMNPQRSTVWXYZ23456789";
+    const A: &[u8] = b"ABCDEFGHJKMNPQRSTVWXYZ23456789"; // 30 chars
     let mut sb = String::new();
     let mut buf = 0u32; let mut bits = 0u32;
     for &b in bytes {
         buf = (buf << 8) | (b as u32); bits += 8;
-        while bits >= 5 { bits -= 5; sb.push(A[(buf >> bits) as usize & 0x1F] as char); }
+        while bits >= 5 { bits -= 5; sb.push(A[(buf >> bits) as usize % A.len()] as char); }
     }
-    if bits > 0 { sb.push(A[(buf << (5 - bits)) as usize & 0x1F] as char); }
+    if bits > 0 { sb.push(A[(buf << (5 - bits)) as usize % A.len()] as char); }
     sb
 }
