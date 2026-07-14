@@ -109,68 +109,79 @@ impl Chat {
         let offline_msgs = self.signaling.fetch_offline(&self.identity.peer_id).await?;
         let my_secret = crypto::parse_priv_key(&self.identity.private_key_b64)?;
 
+        // Parse all messages first, then sort by counter (per sender) to ensure
+        // ratchet processes in correct order (counter 1, 2, 3 — not random UUID order)
+        let mut parsed: Vec<(String, u64, String, String, String, u64, String)> = Vec::new();
+        for msg in offline_msgs {
+            if let Ok(wire) = serde_json::from_str::<serde_json::Value>(&msg.envelope) {
+                let sender_id = wire.get("sender_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let counter = wire.get("counter").and_then(|v| v.as_u64()).unwrap_or(0);
+                let ciphertext = wire.get("ciphertext").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let iv = wire.get("iv").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let hmac = wire.get("hmac").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let timestamp = wire.get("timestamp").and_then(|v| v.as_u64()).unwrap_or(0);
+                let message_id = wire.get("message_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                parsed.push((sender_id, counter, ciphertext, iv, hmac, timestamp, message_id));
+            }
+        }
+        // Sort by (sender_id, counter) — ensures ratchet processes in order per peer
+        parsed.sort_by(|a, b| {
+            a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1))
+        });
+
         let (store_clone, incoming) = {
             let mut s = self.store.write().await;
             let mut incoming = Vec::new();
 
-            for msg in offline_msgs {
-                if let Ok(wire) = serde_json::from_str::<serde_json::Value>(&msg.envelope) {
-                    let sender_id = wire.get("sender_id").and_then(|v| v.as_str()).unwrap_or("");
-                    let counter = wire.get("counter").and_then(|v| v.as_u64()).unwrap_or(0);
-                    let ciphertext = wire.get("ciphertext").and_then(|v| v.as_str()).unwrap_or("");
-                    let iv = wire.get("iv").and_then(|v| v.as_str()).unwrap_or("");
-                    let hmac = wire.get("hmac").and_then(|v| v.as_str()).unwrap_or("");
-                    let timestamp = wire.get("timestamp").and_then(|v| v.as_u64()).unwrap_or(0);
-                    let message_id = wire.get("message_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-
-                    // Find or create conversation for this sender
-                    let conv = s.conversations.iter().find(|c| c.peer_id == sender_id).cloned();
-                    let conv = match conv {
-                        Some(c) => c,
-                        None => {
-                            // Look up sender's public key from Firebase peer registry
-                            match self.signaling.lookup_peer(sender_id).await {
-                                Ok(Some(pub_key)) => {
-                                    let new_conv = Conversation::new_direct(
-                                        conv_id(&self.identity.peer_id, sender_id),
-                                        sender_id.to_string(), sender_id.to_string(), pub_key
-                                    );
-                                    s.conversations.push(new_conv.clone());
-                                    new_conv
-                                }
-                                _ => continue, // skip if peer not found in registry
+            for (sender_id, counter, ciphertext, iv, hmac, timestamp, message_id) in parsed {
+                // Find or create conversation for this sender
+                let conv = s.conversations.iter().find(|c| c.peer_id == sender_id).cloned();
+                let conv = match conv {
+                    Some(c) => c,
+                    None => {
+                        // Look up sender's public key from Firebase peer registry
+                        match self.signaling.lookup_peer(&sender_id).await {
+                            Ok(Some(pub_key)) => {
+                                let new_conv = Conversation::new_direct(
+                                    conv_id(&self.identity.peer_id, &sender_id),
+                                    sender_id.clone(), sender_id.clone(), pub_key
+                                );
+                                s.conversations.push(new_conv.clone());
+                                new_conv
                             }
-                        }
-                    };
-
-                    if !self.sessions.has_session(sender_id) {
-                        if let Ok(their_pub) = crypto::parse_pub_key(&conv.public_key) {
-                            let shared = crypto::derive_key(&my_secret, &their_pub);
-                            self.sessions.establish(sender_id, &shared);
+                            _ => continue,
                         }
                     }
+                };
 
-                    if self.sessions.has_session(sender_id) {
-                        let envelope = SecureEnvelope {
-                            counter, ciphertext: ciphertext.to_string(),
-                            iv: iv.to_string(), hmac: hmac.to_string(),
-                        };
+                if !self.sessions.has_session(&sender_id) {
+                    if let Ok(their_pub) = crypto::parse_pub_key(&conv.public_key) {
+                        let shared = crypto::derive_key(&my_secret, &their_pub);
+                        self.sessions.establish(&sender_id, &shared);
+                    }
+                }
 
-                        match self.sessions.decrypt(sender_id, &envelope) {
-                            Ok(pt) => {
-                                let content = String::from_utf8_lossy(&pt).to_string();
-                                let cid = conv_id(&self.identity.peer_id, sender_id);
-                                s.messages.push(Message::new_text(
-                                    message_id, cid, sender_id.to_string(),
-                                    content.clone(), timestamp, false
-                                ));
-                                if let Some(c) = s.conversations.iter_mut().find(|c| c.peer_id == sender_id) {
-                                    c.last_preview = Some(content.clone());
-                                    c.last_ts = Some(timestamp);
-                                }
-                                incoming.push((sender_id.to_string(), content));
+                if self.sessions.has_session(&sender_id) {
+                    let envelope = SecureEnvelope {
+                        counter, ciphertext, iv, hmac,
+                    };
+
+                    match self.sessions.decrypt(&sender_id, &envelope) {
+                        Ok(pt) => {
+                            let content = String::from_utf8_lossy(&pt).to_string();
+                            let cid = conv_id(&self.identity.peer_id, &sender_id);
+                            s.messages.push(Message::new_text(
+                                message_id, cid, sender_id.clone(),
+                                content.clone(), timestamp, false
+                            ));
+                            if let Some(c) = s.conversations.iter_mut().find(|c| c.peer_id == sender_id) {
+                                c.last_preview = Some(content.clone());
+                                c.last_ts = Some(timestamp);
                             }
-                            Err(_) => {}
+                            incoming.push((sender_id, content));
+                        }
+                        Err(e) => {
+                            eprintln!("[drain] decrypt failed from {}: {} (counter={})", sender_id, e, counter);
                         }
                     }
                 }
