@@ -53,9 +53,9 @@ pub extern "system" fn Java_com_torentchat_TorentChatNative_getPublicKey(mut env
 pub extern "system" fn Java_com_torentchat_TorentChatNative_sendMessage(
     mut env: JNIEnv, _cls: JClass, peer_id: JString, pub_key: JString, content: JString,
 ) -> jboolean {
-    let peer = env.get_string(&peer_id).map(|s| s.to_string()).unwrap_or_default();
-    let key = env.get_string(&pub_key).map(|s| s.to_string()).unwrap_or_default();
-    let msg = env.get_string(&content).map(|s| s.to_string()).unwrap_or_default();
+    let peer: String = env.get_string(&peer_id).map(|s| s.into()).unwrap_or_default();
+    let key: String = env.get_string(&pub_key).map(|s| s.into()).unwrap_or_default();
+    let msg: String = env.get_string(&content).map(|s| s.into()).unwrap_or_default();
     if peer.is_empty() || key.is_empty() || msg.is_empty() { return 0; }
     let chat = chat().clone();
     rt().spawn(async move { let _ = chat.send(&peer, &key, &msg).await; });
@@ -66,8 +66,8 @@ pub extern "system" fn Java_com_torentchat_TorentChatNative_sendMessage(
 pub extern "system" fn Java_com_torentchat_TorentChatNative_connect(
     mut env: JNIEnv, _cls: JClass, peer_id: JString, pub_key: JString,
 ) {
-    let peer = env.get_string(&peer_id).map(|s| s.to_string()).unwrap_or_default();
-    let key = env.get_string(&pub_key).map(|s| s.to_string()).unwrap_or_default();
+    let peer: String = env.get_string(&peer_id).map(|s| s.into()).unwrap_or_default();
+    let key: String = env.get_string(&pub_key).map(|s| s.into()).unwrap_or_default();
     if !peer.is_empty() && !key.is_empty() {
         let chat = chat().clone();
         rt().spawn(async move { chat.connect_async(&peer, &key).await; });
@@ -93,7 +93,7 @@ pub extern "system" fn Java_com_torentchat_TorentChatNative_getConversations(mut
 pub extern "system" fn Java_com_torentchat_TorentChatNative_getMessages(
     mut env: JNIEnv, _cls: JClass, peer_id: JString,
 ) -> jstring {
-    let peer = env.get_string(&peer_id).map(|s| s.to_string()).unwrap_or_default();
+    let peer: String = env.get_string(&peer_id).map(|s| s.into()).unwrap_or_default();
     let cid = torentchat_core::data::conv_id(&chat().identity.peer_id, &peer);
     let msgs: Vec<_> = chat().store.blocking_read().messages.iter()
         .filter(|m| m.cid == cid).cloned().collect();
