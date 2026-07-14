@@ -6,12 +6,17 @@ use std::path::PathBuf;
 pub struct Conversation {
     pub id: String, pub title: String, pub peer_id: String,
     pub public_key: String, pub last_preview: Option<String>, pub last_ts: Option<u64>,
+    pub conv_type: Option<String>, // "direct" or "group"
+    pub members: Option<Vec<String>>, // for group chat
+    pub auto_delete_ms: Option<u64>, // ephemeral: auto-delete after this duration
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Message {
     pub id: String, pub cid: String, pub sender: String,
     pub content: String, pub ts: u64, pub out: bool,
+    pub read: bool, // read receipt
+    pub msg_type: Option<String>, // "text", "image", "system", "read_receipt"
 }
 
 #[derive(Serialize, Deserialize, Default, Clone)]
