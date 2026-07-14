@@ -77,10 +77,6 @@ impl RatchetState {
     pub fn recv_counter(&self) -> u64 { self.recv_counter }
 }
 
-    pub fn send_counter(&self) -> u64 { self.send_counter }
-    pub fn recv_counter(&self) -> u64 { self.recv_counter }
-}
-
 // ─── Session Manager: per-peer ratchet states ─────────────────────────────────
 
 pub struct SessionManager {
