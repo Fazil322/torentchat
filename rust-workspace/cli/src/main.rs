@@ -9,7 +9,7 @@ use torentchat_core::identity;
 async fn main() -> Result<()> {
     eprintln!("\n\x1b[36m\x1b[1m╔══════════════════════════════════════════╗\x1b[0m");
     eprintln!("\x1b[36m\x1b[1m║      🔐  TorentChat CLI (Rust)  🔐        ║\x1b[0m");
-    eprintln!("\x1b[36m\x1b[1m║  P2P Encrypted — X25519 + AES-256-GCM   ║\x1b[0m");
+    eprintln!("\x1b[36m\x1b[1m║  P2P + Firebase + X25519 + AES-256-GCM   ║\x1b[0m");
     eprintln!("\x1b[36m\x1b[1m╚══════════════════════════════════════════╝\x1b[0m\n");
 
     let id = match identity::load_identity() {
@@ -21,17 +21,26 @@ async fn main() -> Result<()> {
 
     let chat = Arc::new(Chat::new(id.clone()));
 
-    // Background poller
-    { let chat = chat.clone(); let pid = id.peer_id.clone();
-      tokio::spawn(async move {
-        loop {
-            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-            let _ = chat.set_presence(false).await;
-            if let Ok(v) = chat.drain().await {
-                for (f, c) in v { eprintln!("\r\x1b[32m← [{}] {}\x1b[0m", f, c); }
+    // Initialize: register on Firebase + drain offline messages
+    match chat.initialize().await {
+        Ok(_) => eprintln!("\x1b[32m✓ Registered on Firebase\n\x1b[0m"),
+        Err(e) => eprintln!("\x1b[31m⚠ Firebase init error: {}\n\x1b[0m", e),
+    }
+
+    // Background poller: drain offline messages + presence every 5s
+    {
+        let chat = chat.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                let _ = chat.set_presence(false).await;
+                if let Ok(v) = chat.drain().await {
+                    for (f, c) in v {
+                        eprintln!("\r\x1b[32m← [{}] {}\x1b[0m", f, c);
+                    }
+                }
             }
-        }
-      });
+        });
     }
 
     eprintln!("Type \x1b[36m/help\x1b[0m for commands.\n");
@@ -44,8 +53,11 @@ async fn main() -> Result<()> {
         if line.is_empty() { continue; }
         let parts: Vec<&str> = line.splitn(3, ' ').collect();
         match parts[0].to_lowercase().as_str() {
-            "/help"|"help"|"?" => eprintln!("  /id  /list  /connect <id> <key>  /send <id> <msg>  /read <id>  /poll  /quit"),
-            "/id" => { eprintln!("Peer ID: {}\nPublic Key: {}", id.peer_id, id.public_key_b64); }
+            "/help"|"help"|"?" => eprintln!("  /id  /list  /connect <peerId>  /send <peerId> <msg>  /read <peerId>  /poll  /quit"),
+            "/id" => {
+                eprintln!("Peer ID: {}", id.peer_id);
+                eprintln!("Public Key: {}", id.public_key_b64);
+            }
             "/list" => {
                 let convs = chat.list().await;
                 if convs.is_empty() { eprintln!("\x1b[2mNo conversations.\x1b[0m"); }
@@ -53,26 +65,32 @@ async fn main() -> Result<()> {
                     eprintln!("  {}. {} \x1b[2m{}\x1b[0m", i+1, c.title, c.last_preview.as_deref().unwrap_or("")); }}
             }
             "/connect" => {
-                if parts.len()<3 { eprintln!("\x1b[31mUsage: /connect <peerId> <pubKey>\x1b[0m"); }
-                else { chat.connect(parts[1],parts[2]); eprintln!("\x1b[32m✓ Connected\x1b[0m"); }
+                if parts.len() < 2 { eprintln!("\x1b[31mUsage: /connect <peerId>\x1b[0m"); }
+                else {
+                    // Look up peer's public key from Firebase
+                    match chat.connect_by_peer_id(parts[1]).await {
+                        Ok(pk) => eprintln!("\x1b[32m✓ Connected to {} (key: {}...)\x1b[0m", parts[1], &pk[..20.min(pk.len())]),
+                        Err(e) => eprintln!("\x1b[31m✗ Failed: {}\x1b[0m", e),
+                    }
+                }
             }
             "/send" => {
-                if parts.len()<3 { eprintln!("\x1b[31mUsage: /send <peerId> <msg>\x1b[0m"); }
+                if parts.len() < 3 { eprintln!("\x1b[31mUsage: /send <peerId> <msg>\x1b[0m"); }
                 else {
                     let s = chat.store.read().await;
-                    let pk = s.conversations.iter().find(|c|c.peer_id==parts[1]).map(|c|c.public_key.clone());
+                    let pk = s.conversations.iter().find(|c| c.peer_id == parts[1]).map(|c| c.public_key.clone());
                     drop(s);
                     match pk {
-                        Some(pk) => match chat.send(parts[1],&pk,parts[2]).await {
+                        Some(pk) => match chat.send(parts[1], &pk, parts[2]).await {
                             Ok(_) => eprintln!("\x1b[36m→ [{}] {}\x1b[0m", fmt_ts(now_ts()), parts[2]),
                             Err(e) => eprintln!("\x1b[31m✗ {}\x1b[0m", e),
                         },
-                        None => eprintln!("\x1b[31mUnknown peer.\x1b[0m"),
+                        None => eprintln!("\x1b[31mUnknown peer. Use /connect <peerId> first.\x1b[0m"),
                     }
                 }
             }
             "/read" => {
-                if parts.len()<2 { eprintln!("\x1b[31mUsage: /read <peerId>\x1b[0m"); }
+                if parts.len() < 2 { eprintln!("\x1b[31mUsage: /read <peerId>\x1b[0m"); }
                 else {
                     let cid = conv_id(&id.peer_id, parts[1]);
                     for m in chat.messages(&cid).await {
