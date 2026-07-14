@@ -1,0 +1,12 @@
+{
+  "name": "torentchat-worker",
+  "version": "0.1.0",
+  "main": "src/index.ts",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev"
+  },
+  "devDependencies": {
+    "wrangler": "^3.60.0"
+  }
+}

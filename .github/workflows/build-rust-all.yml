@@ -148,28 +148,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          targets: wasm32-unknown-unknown
-      - name: Install wasm-bindgen-cli (match worker crate version)
-        run: cargo install -q wasm-bindgen-cli --version 0.2.126
-      - name: Build Rust to WASM
-        working-directory: rust-workspace
-        run: cargo build --release --lib --target wasm32-unknown-unknown -p torentchat-worker
-      - name: Generate JS bindings
-        working-directory: rust-workspace
-        run: |
-          mkdir -p worker/build/worker
-          wasm-bindgen --no-typescript --target web --out-name index --out-dir worker/build/worker target/wasm32-unknown-unknown/release/torentchat_worker.wasm
-      - name: Create shim.mjs
-        working-directory: rust-workspace/worker
-        run: |
-          mkdir -p build/worker
-          cat > build/worker/shim.mjs << 'SHIM'
-          import { fetch } from './index.js';
-          export default { fetch };
-          SHIM
-      - name: Deploy to Cloudflare
+          node-version: '20'
+      - name: Deploy TypeScript Worker
         working-directory: rust-workspace/worker
         run: npx wrangler deploy
         env:

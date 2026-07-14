@@ -1,9 +1,6 @@
 name = "torentchat-worker"
-main = "build/worker/shim.mjs"
+main = "src/index.ts"
 compatibility_date = "2024-07-01"
-compatibility_flags = ["nodejs_compat"]
-
-# No [build] section — CI builds WASM manually (cargo + wasm-bindgen)
 
 [[kv_namespaces]]
 binding = "SIGNALING"
