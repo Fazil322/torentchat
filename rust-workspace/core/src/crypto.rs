@@ -23,17 +23,25 @@ pub struct RatchetState {
 }
 
 impl RatchetState {
-    pub fn new(shared_secret: &[u8; 32]) -> Self {
+    /// RM-1 FIX: Role-based chain key derivation.
+    /// Peer with smaller ID is "initiator" (a_send/b_recv).
+    /// Peer with larger ID is "responder" (b_send/a_recv).
+    /// This ensures: my send_key == their recv_key, my recv_key == their send_key.
+    pub fn new(shared_secret: &[u8; 32], my_peer_id: &str, their_peer_id: &str) -> Self {
+        let is_initiator = my_peer_id < their_peer_id;
+        let send_label = if is_initiator { b"a_send" } else { b"b_send" };
+        let recv_label = if is_initiator { b"b_recv" } else { b"a_recv" };
+
         let mut send_key = [0u8; 32];
-        let mut recv_key = [0u8; 32];
-        // Derive initial chain keys from shared secret
         let mut h = Sha256::new();
         h.update(shared_secret);
-        h.update(b"send_chain");
+        h.update(send_label);
         send_key.copy_from_slice(&h.finalize());
+
+        let mut recv_key = [0u8; 32];
         let mut h = Sha256::new();
         h.update(shared_secret);
-        h.update(b"recv_chain");
+        h.update(recv_label);
         recv_key.copy_from_slice(&h.finalize());
 
         RatchetState {
@@ -96,9 +104,9 @@ impl SessionManager {
         let _ = save_sessions(&sessions);
     }
 
-    pub fn establish(&self, peer_id: &str, shared_secret: &[u8; 32]) {
+    pub fn establish(&self, peer_id: &str, shared_secret: &[u8; 32], my_peer_id: &str) {
         let mut sessions = self.sessions.lock().unwrap();
-        sessions.insert(peer_id.to_string(), RatchetState::new(shared_secret));
+        sessions.insert(peer_id.to_string(), RatchetState::new(shared_secret, my_peer_id, peer_id));
         drop(sessions);
         self.persist();
     }

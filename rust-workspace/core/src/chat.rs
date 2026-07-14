@@ -60,7 +60,7 @@ impl Chat {
 
         if !self.sessions.has_session(peer_id) {
             let shared = crypto::derive_key(&my_secret, &their_pub);
-            self.sessions.establish(peer_id, &shared);
+            self.sessions.establish(peer_id, &shared, &self.identity.peer_id);
         }
 
         let envelope = self.sessions.encrypt(peer_id, content.as_bytes())?;
@@ -111,7 +111,8 @@ impl Chat {
 
         // Parse all messages first, then sort by counter (per sender) to ensure
         // ratchet processes in correct order (counter 1, 2, 3 — not random UUID order)
-        let mut parsed: Vec<(String, u64, String, String, String, u64, String)> = Vec::new();
+        // Parse all messages with their Firebase msg_id for selective delete
+        let mut parsed: Vec<(String, u64, String, String, String, u64, String, String)> = Vec::new();
         for msg in offline_msgs {
             if let Ok(wire) = serde_json::from_str::<serde_json::Value>(&msg.envelope) {
                 let sender_id = wire.get("sender_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
@@ -121,7 +122,7 @@ impl Chat {
                 let hmac = wire.get("hmac").and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let timestamp = wire.get("timestamp").and_then(|v| v.as_u64()).unwrap_or(0);
                 let message_id = wire.get("message_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                parsed.push((sender_id, counter, ciphertext, iv, hmac, timestamp, message_id));
+                parsed.push((sender_id, counter, ciphertext, iv, hmac, timestamp, message_id, msg.msg_id));
             }
         }
         // Sort by (sender_id, counter) — ensures ratchet processes in order per peer
@@ -133,7 +134,7 @@ impl Chat {
             let mut s = self.store.write().await;
             let mut incoming = Vec::new();
 
-            for (sender_id, counter, ciphertext, iv, hmac, timestamp, message_id) in parsed {
+            for (sender_id, counter, ciphertext, iv, hmac, timestamp, message_id, fb_msg_id) in parsed {
                 // Find or create conversation for this sender
                 let conv = s.conversations.iter().find(|c| c.peer_id == sender_id).cloned();
                 let conv = match conv {
@@ -157,7 +158,7 @@ impl Chat {
                 if !self.sessions.has_session(&sender_id) {
                     if let Ok(their_pub) = crypto::parse_pub_key(&conv.public_key) {
                         let shared = crypto::derive_key(&my_secret, &their_pub);
-                        self.sessions.establish(&sender_id, &shared);
+                        self.sessions.establish(&sender_id, &shared, &self.identity.peer_id);
                     }
                 }
 
@@ -179,9 +180,12 @@ impl Chat {
                                 c.last_ts = Some(timestamp);
                             }
                             incoming.push((sender_id, content));
+                            // RM-2 FIX: Only delete from Firebase AFTER successful decrypt
+                            let _ = self.signaling.delete_offline_msg(&self.identity.peer_id, &fb_msg_id).await;
                         }
                         Err(e) => {
                             eprintln!("[drain] decrypt failed from {}: {} (counter={})", sender_id, e, counter);
+                            // RM-2: Message NOT deleted — stays in Firebase for retry
                         }
                     }
                 }

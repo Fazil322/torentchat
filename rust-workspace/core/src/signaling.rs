@@ -122,13 +122,19 @@ impl Signaling {
                     from: obj.get("from").and_then(|v| v.as_str()).unwrap_or("").to_string(),
                     envelope: obj.get("envelope").and_then(|v| v.as_str()).unwrap_or("").to_string(),
                     ts: obj.get("ts").and_then(|v| v.as_u64()).unwrap_or(0),
+                    msg_id: msg_id.clone(),  // RM-2: keep msg_id for selective delete
                 });
             }
-            // Delete after reading
-            let del_url = format!("{FB_URL}/offline/{peer_id}/{msg_id}.json");
-            let _ = self.http.delete(&del_url).send().await;
+            // RM-2 FIX: Do NOT delete here — only delete after successful decrypt in drain()
         }
         Ok(messages)
+    }
+
+    /// RM-2: Delete a single offline message after successful decrypt
+    pub async fn delete_offline_msg(&self, peer_id: &str, msg_id: &str) -> Result<()> {
+        let url = format!("{FB_URL}/offline/{peer_id}/{msg_id}.json");
+        let _ = self.http.delete(&url).send().await;
+        Ok(())
     }
 
     // ── Presence ──────────────────────────────────────────────────────────────
@@ -169,6 +175,7 @@ pub struct OfflineMsg {
     pub from: String,
     pub envelope: String,
     pub ts: u64,
+    pub msg_id: String,  // RM-2: for selective delete after decrypt
 }
 
 #[derive(Debug, Deserialize)]
