@@ -90,13 +90,13 @@ jobs:
           packages: 'platform-tools platforms;android-30 build-tools;30.0.3'
       - name: Install cargo-apk
         run: cargo install -q cargo-apk
-      - name: Build APK
+      - name: Build APK (debug — no keystore needed)
         working-directory: rust-workspace/android
-        run: cargo apk build --release
+        run: cargo apk build --debug
       - uses: actions/upload-artifact@v4
         with:
           name: torentchat-android-apk
-          path: rust-workspace/target/release/apk/*.apk
+          path: rust-workspace/target/debug/apk/*.apk
           if-no-files-found: error
 
   release:
@@ -149,8 +149,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      - name: Install wasm-bindgen-cli
-        run: cargo install -q wasm-bindgen-cli --version 0.2.95
+      - name: Install wasm-bindgen-cli (match worker crate version)
+        run: cargo install -q wasm-bindgen-cli --version 0.2.126
       - name: Build Rust to WASM
         working-directory: rust-workspace
         run: cargo build --release --lib --target wasm32-unknown-unknown -p torentchat-worker
