@@ -26,7 +26,7 @@ async fn main() -> Result<()> {
       tokio::spawn(async move {
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-            let _ = chat.set_presence().await;
+            let _ = chat.set_presence(false).await;
             if let Ok(v) = chat.drain().await {
                 for (f, c) in v { eprintln!("\r\x1b[32m← [{}] {}\x1b[0m", f, c); }
             }

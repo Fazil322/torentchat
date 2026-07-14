@@ -30,7 +30,7 @@ impl App {
         rt.spawn(async move {
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-                let _ = chat2.set_presence().await;
+                let _ = chat2.set_presence(false).await;
                 let _ = chat2.drain().await;
             }
         });

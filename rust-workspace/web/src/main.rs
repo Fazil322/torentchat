@@ -45,7 +45,7 @@ async fn main() -> Result<()> {
       tokio::spawn(async move {
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-            let _ = chat.set_presence().await;
+            let _ = chat.set_presence(false).await;
             let _ = chat.drain().await;
         }
       });
