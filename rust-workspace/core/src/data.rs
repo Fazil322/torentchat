@@ -14,7 +14,7 @@ pub struct Message {
     pub content: String, pub ts: u64, pub out: bool,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Clone)]
 pub struct Store {
     pub conversations: Vec<Conversation>,
     pub messages: Vec<Message>,
